@@ -20,22 +20,37 @@ class SampleBatch(dict):
     def __init__(
             self,
             batch_size,
+            # float_dtype=np.float32,
+            # int_dtype=np.int32
     ):
-        super().__init__(self)
+        super().__init__()
 
         self.batch_size = batch_size
         self.index = 1
+        # self.float_dtype = float_dtype
+        # self.int_dtype = int_dtype
 
-    def __getitem__(self, item):
-        if item == SampleBatch.PREV_OBS:
-            pass
+    # def __getitem__(self, key):
+    #     if "prev" in key:
+    #         key = key.lstrip("prev_")
+    #         return super().__getitem__(key)[:-1]
+    #     else:
+    #         print(key, self)
+    #         return super().__getitem__(key)[1:]
+
 
     def init_key(self, key, value):
         def leaves_to_numpy(value):
             if isinstance(value, np.ndarray):
                 return np.zeros((self.batch_size + 1,) + value.shape, dtype=value.dtype)
+            elif isinstance(value, np.float32):
+                return np.zeros((self.batch_size + 1,), dtype=np.float32)
+            elif isinstance(value, np.int32):
+                return np.zeros((self.batch_size + 1,), dtype=np.int32)
+            elif isinstance(value, str):
+                return np.zeros((self.batch_size + 1,), dtype=str)
             else:
-                return np.zeros((self.batch_size + 1,), dtype=type(value))
+                return np.zeros((self.batch_size + 1,), dtype=object)
         self[key] = tree.map_structure(leaves_to_numpy, value)
 
     def advance(self):
@@ -48,23 +63,27 @@ class SampleBatch(dict):
         for key, value in data.items():
             if key not in self:
                 self.init_key(key, value)
+            print(key, self[key])
             self[key][self.index] = value
         self.advance()
         if self.is_full():
             self.reset()
-            return [deepcopy(self)]
+            return [self]
         return []
         # when full, reset and send batch
 
     def is_full(self):
-        return self.batch_size + 1 == self.index
+        return self.batch_size == self.index
 
     def __getslice__(self, key: str, i, j):
         if not key.startswith("prev_"):
             i += 1
             j += 1
         else:
-            key.lstrip("prev_")
+            key = key.lstrip("prev_")
 
         return tree.map_structure(lambda x: x[i: j], self[key])
+
+    def __repr__(self):
+        return f"SampleBatch(size={self.batch_size}, content={list(self.keys())})"
 

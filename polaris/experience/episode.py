@@ -1,13 +1,12 @@
-from typing import Iterator
+from typing import Iterator, List
 
 import numpy as np
 from ml_collections import ConfigDict
 
-from polaris.episode import SampleBatch
+from .sample_batch import SampleBatch
 
 
 class Episode:
-
 
     def __init__(
             self,
@@ -22,14 +21,13 @@ class Episode:
 
         self.metrics = {}
 
-
     def run(
             self,
             sample_batches,
             options=None
-    ) -> Iterator[SampleBatch]:
+    ) -> Iterator[List[SampleBatch]]:
         """
-        :param sample_batches: batches to fill for each policy, can come from a previous episode. Pushes to the trainer proc every times a batch has been filled
+        :param sample_batches: batches to fill for each policy, can come from a previous experience. Pushes to the trainer proc every times a batch has been filled
         :param options: passed to the env.reset() method
         :return: partially filled sample_batches
         """
@@ -39,13 +37,13 @@ class Episode:
         }
         next_states = {}
         actions = {}
-        prev_actions = {0 for _ in self.agents_to_policies}
-        prev_rewards = {0 for _ in self.agents_to_policies}
+        prev_actions = {aid: 0 for aid in self.agents_to_policies}
+        prev_rewards = {aid: 0 for aid in self.agents_to_policies}
         dones = {
             aid: False for aid in self.agents_to_policies
         }
         dones["__all__"] = False
-        observations, infos = self.env.reset(options)
+        observations, infos = self.env.reset(options=options)
 
         while not dones["__all__"]:
             for aid, policy in self.agents_to_policies.items():
@@ -56,7 +54,8 @@ class Episode:
                     states=states[aid]
                 )
 
-            next_observations, rewards, dones, _, infos = self.env.step(actions)
+            next_observations, rewards, dones, truncs, infos = self.env.step(actions)
+            dones["__all__"] = dones["__all__"] or truncs["__all__"]
             # self.config.callbacks.on_env_step(
             #     actions,
             #     observations,
@@ -68,19 +67,18 @@ class Episode:
             #     self.metrics
             # )
 
-
             batches = []
             for aid, policy in self.agents_to_policies.items():
                 if not dones[aid] or dones["__all__"]:
                     batches += sample_batches[aid].push(
                         {
-                        SampleBatch.OBS: observations[aid],
-                        SampleBatch.ACTION: actions[aid],
-                        SampleBatch.REWARD: rewards[aid],
-                        SampleBatch.DONE: dones[aid],
-                        SampleBatch.AGENT_ID: aid,
-                        SampleBatch.POLICY_ID: policy.name,
-                        SampleBatch.EPISODE_ID: self.id
+                            SampleBatch.OBS: observations[aid],
+                            SampleBatch.ACTION: actions[aid],
+                            SampleBatch.REWARD: rewards[aid],
+                            SampleBatch.DONE: dones[aid],
+                            SampleBatch.AGENT_ID: aid,
+                            SampleBatch.POLICY_ID: policy.name,
+                            SampleBatch.EPISODE_ID: self.id
                         }
                     )
             if len(batches) > 0:
@@ -90,8 +88,3 @@ class Episode:
             prev_actions = actions
 
         # pass the batch for next episodes
-        return sample_batches
-
-
-
-
