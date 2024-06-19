@@ -90,7 +90,7 @@ class MetricBank:
         """
 
         self.metrics = {}
-        self.logdir = PathManager.get_tensorboard_logdir(dirname)
+        self.logdir = PathManager(base_dir="").get_tensorboard_logdir(dirname)
         self.report_freq = report_freq
 
         import tensorflow as tf
@@ -100,20 +100,33 @@ class MetricBank:
         # TODO : take care of hist, etc
         self.metrics[name] = Metric(name, init_value, smoothing, n_init, save_history)
 
-    def update(self, batch, n_samples=1):
+    def update(self, batch, n_samples=1, prefix=""):
         """
         :param batch: iteration data, data that is tracked by this bank will be updated.
         :param n_samples: how many samples are contained in the batch
+        :param prefix: additional prefix for the batch metrics
         """
 
-        for metric_name, metric in self.metrics.items():
-            if metric_name in batch:
-                metric.update(batch[metric_name], n_samples=n_samples)
+        for metric_name, value in batch.items():
+            p_metric_name =  prefix + metric_name
+            if p_metric_name in batch:
+                self.metrics[p_metric_name].update(value, n_samples=n_samples)
+            else:
+                self.metrics[p_metric_name] = Metric(
+                    name=p_metric_name,
+                    init_value=value
+                )
+    def report(self, print_metrics=False):
 
         if GlobalCounter["step"] % self.report_freq == 0:
             if self.writer.as_default():
-                for metric in self.metrics.values():
+                for name, metric in self.metrics.items():
                     metric.report()
+
+                    if print_metrics:
+                        print(f"{name}:\t\t\t{metric.get():.5f}")
+
+
 
     def __del__(self):
         self.writer.close()

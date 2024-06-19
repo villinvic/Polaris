@@ -2,11 +2,13 @@ from typing import Optional
 
 import numpy as np
 import tree
+from gymnasium.envs.classic_control import CartPoleEnv
 
 from polaris.policies.random import RandomPolicy
 from .polaris_env import PolarisEnv
-from ray.tune.registry import _Registry, ENV_CREATOR, _global_registry
-from polaris import Episode, SampleBatch
+from ray.tune.registry import ENV_CREATOR, _global_registry
+from polaris.experience.episode import Episode
+from polaris.experience.sampling import SampleBatch
 
 from gymnasium.spaces import Dict, Discrete, Box
 
@@ -14,8 +16,8 @@ class DummyEnv(PolarisEnv):
 
     def __init__(self):
         PolarisEnv.__init__(self, env_id="dummy")
-        self._agent_ids = {0, 1}
-        self.num_players = 2
+        self._agent_ids = {0,1,2}
+        self.num_players = len(self._agent_ids)
         self.episode_length = 32
         self.step_count = 0
 
@@ -58,7 +60,33 @@ class DummyEnv(PolarisEnv):
         return obs, rews, dones, trunc, info
 
 
+class PolarisCartPole(CartPoleEnv, PolarisEnv):
 
+    def __init__(self):
+
+        PolarisEnv.__init__(self, env_id="cartpole")
+        CartPoleEnv.__init__(self)
+
+        self._agent_ids = {0}
+
+    def reset(
+        self,
+        *,
+        seed: Optional[int] = None,
+        options: Optional[dict] = None,
+    ):
+        return tree.map_structure(lambda v: {
+            0: v
+        }, super().reset(seed=seed, options=options))
+
+
+    def step(self, action):
+        d = tree.map_structure(lambda v: {
+            0: v
+        }, super().step(action[0]))
+        d[2]["__all__"] = d[2][0]
+        d[3]["__all__"] = False
+        return d
 
 
 if __name__ == '__main__':

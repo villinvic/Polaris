@@ -1,24 +1,35 @@
+from typing import Dict
+
 from .policy import Policy
 
 class RandomPolicy(Policy):
+    policy_type = "random"
 
     def __init__(
             self,
             action_space,
-
+            config
     ):
         super().__init__(
             name="RandomPolicy",
             action_space=action_space,
             observation_space=None,
+            model=None,
+            config=config,
         )
 
     def compute_action(
             self,
-            observation,
-            states=None,
-            prev_action=None,
-            prev_reward=None
+            input_dict
 
     ):
         return self.action_space.sample(), None
+
+    def get_weights(self):
+        return {}
+
+    def set_weights(self, weights: Dict):
+        pass
+
+    def init_model(self):
+        pass

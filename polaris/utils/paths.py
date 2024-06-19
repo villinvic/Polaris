@@ -23,8 +23,8 @@ class PathManager:
         """Get the path for a file in the models directory."""
         return os.path.join(self.models_dir, filename)
 
-    def get_tensorboard_logdir(self, dir: str = "") -> str:
+    def get_tensorboard_logdir(self, dir_name: str = "") -> str:
         """Get the path for a dir in the tensorboard logs directory."""
-        path = os.path.join(self.tensorboard_logs_dir, dir)
+        path = os.path.join(self.tensorboard_logs_dir, dir_name)
         os.makedirs(path, exist_ok=True)
         return path
