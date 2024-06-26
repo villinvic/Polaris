@@ -1,6 +1,9 @@
+import importlib
+import time
 from abc import ABC, abstractmethod
 from typing import NamedTuple, Dict, Type
 
+import numpy as np
 from gymnasium.spaces import Space
 from ml_collections import ConfigDict
 from polaris.models.base import BaseModel
@@ -16,40 +19,37 @@ class Policy(ABC):
             name: str,
             action_space: Space,
             observation_space: Space,
-            model: Type[BaseModel],
             config: ConfigDict,
+            policy_config: ConfigDict,
     ):
         self.name = name
         self.action_space = action_space
         self.observation_space = observation_space
-        self.version = 0
+        self.version = 1
         self.config = config
-        self.policy_config = config.policy_config
-        self.model_class = model
-
+        self.policy_config = policy_config
+        self.model_class = getattr(importlib.import_module(self.config.model_path), self.config.model_class)
+        self.is_recurrent = self.model_class is not None and self.model_class.is_recurrent
+        self.model = None
         self.init_model()
 
     def init_model(self):
         self.model = self.model_class(
             observation_space=self.observation_space,
             action_space=self.action_space,
-            model_config=self.config.model_config
+            config=self.policy_config
         )
+        self.model.setup()
 
     @abstractmethod
     def compute_action(
             self,
             input_dict: SampleBatch
-            # observation,
-            # state=None,
-            # prev_action=None,
-            # prev_obs=None,
-            # prev_reward=None,
     ):
         pass
 
     def get_initial_state(self):
-        pass
+        return self.model.get_initial_state()
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name}, version={self.version})"
@@ -60,8 +60,8 @@ class Policy(ABC):
 
         self.name = policy_params.name
         self.set_weights(weights=policy_params.weights)
+        self.policy_config.update(**policy_params.config)
         self.version = policy_params.version
-
         return self
 
     @abstractmethod
@@ -74,6 +74,7 @@ class Policy(ABC):
         pass
 
     def get_params(self):
+
         return PolicyParams(
             name=self.name,
             weights=self.get_weights(),
@@ -83,7 +84,9 @@ class Policy(ABC):
         )
 
     def train(self, batch: SampleBatch):
+        res =  {"delta_version": self.version - np.mean(batch[SampleBatch.VERSION][batch[SampleBatch.VERSION]>0])}
         self.version += 1
+        return res
 
 
 class DummyPolicy(Policy):

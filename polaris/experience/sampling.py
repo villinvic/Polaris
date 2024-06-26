@@ -1,3 +1,4 @@
+import queue
 from typing import List
 
 import numpy as np
@@ -24,76 +25,56 @@ class SampleBatch(dict):
     T = "t"
     VERSION = "version"
 
+
+    SEQ_LENS = "seq_lens" # Does not have the time dimension
+
     def __init__(
             self,
-            batch_size,
-            # float_dtype=np.float32,
-            # int_dtype=np.int32
+            trajectory_length,
+            max_seq_len=None,
+            **initial_batch
     ):
-        super().__init__()
+        super().__init__(**initial_batch)
 
-        self.batch_size = batch_size
+        self.trajectory_length = trajectory_length
         self.index = 0
-        self.batch_dim = 1
-        self.episode_slicing_indices = None
-        self.seq_lens = None
-
-        # Is this nice ?
-        self.compression = False
-        # self.float_dtype = float_dtype
-        # self.int_dtype = int_dtype
+        self.sequence_counter = 0
+        self.max_seq_len = max_seq_len if max_seq_len is not None else trajectory_length
+        self[SampleBatch.SEQ_LENS] = []
 
     def __getitem__(self, key):
-        if self.compression:
-            if key not in self :
-                if key.startswith("prev_"):
-                    key = key.lstrip("prev_")
-                    return tree.map_structure(
-                        lambda v: v[:-2],
-                        super().__getitem__(key)
-                    )
-                elif key.startswith("next_"):
-                    key = key.lstrip("prev_")
-                    return tree.map_structure(
-                        lambda v: v[2:],
-                        super().__getitem__(key)
-                    )
-            else:
-
-                return tree.map_structure(
-                    lambda v: v[1:-1],
-                    super().__getitem__(key)
-                )
-        else:
-            return super().__getitem__(key)
+        if isinstance(key, slice):
+            return self.__getslice__(key)
+        return super().__getitem__(key)
 
     def init_key(self, key, value):
 
         # + 2
         def leaves_to_numpy(value):
             if isinstance(value, np.ndarray):
-                return np.zeros((1, self.batch_size,) + value.shape, dtype=value.dtype)
-            elif isinstance(value, np.float32):
-                return np.zeros((1, self.batch_size,), dtype=np.float32)
-            elif isinstance(value, np.int32):
-                return np.zeros((1, self.batch_size,), dtype=np.int32)
+                return np.zeros((self.trajectory_length,) + value.shape, dtype=value.dtype)
+            elif isinstance(value, (np.float32, float)) or value is None:
+                return np.zeros((self.trajectory_length,), dtype=np.float32)
+            elif isinstance(value, (np.int32, np.int16, int)):
+                return np.zeros((self.trajectory_length,), dtype=np.int32)
             elif isinstance(value, bool):
-                return np.zeros((1, self.batch_size,), dtype=np.bool_)
+                return np.zeros((self.trajectory_length,), dtype=np.bool_)
             elif isinstance(value, str):
-                return np.zeros((1, self.batch_size,), dtype='<U20')
+                return np.zeros((self.trajectory_length,), dtype='<U20')
             else:
-                return np.zeros((1, self.batch_size,), dtype=object)
+                return np.zeros((self.trajectory_length,), dtype=object)
         self[key] = tree.map_structure(leaves_to_numpy, value)
 
     def advance(self):
         self.index += 1
 
     def reset(self):
-        # tree.map_structure(
-        #     self.set_previous,
-        #     self
-        # )
         self.index = 0
+        self.sequence_counter = 0
+        self[SampleBatch.SEQ_LENS] = []
+
+    def size(self):
+        return self.trajectory_length
 
     def push(self, data):
         if self.is_full():
@@ -107,77 +88,84 @@ class SampleBatch(dict):
                 self.set_item,
                 super().__getitem__(key), value
             )
+
+        done = data.get(SampleBatch.DONE, False)
         self.advance()
+
+        self.sequence_counter += 1
+        if done or self.sequence_counter % self.max_seq_len == 0 or self.is_full():
+            if self.sequence_counter % self.max_seq_len == 0:
+                seq_len = self.max_seq_len
+            else:
+                seq_len = self.sequence_counter % self.max_seq_len
+                self.sequence_counter = 0
+            self[SampleBatch.SEQ_LENS].append(seq_len)
+
         if self.is_full():
+            assert sum(self[SampleBatch.SEQ_LENS])==self.trajectory_length, f"Seq_lens not summing to {self.trajectory_length}"
             return [self]
         return []
         # when full, reset and send batch
 
     def is_full(self):
-        return self.batch_size == self.index
+        return self.trajectory_length == self.index
 
-    def __getslice__(self, key: str, i, j):
-        if self.compression:
-            if not key.startswith("prev_"):
-                i += 1
-                j += 1
-            else:
-                key = key.lstrip("prev_")
+    def __getslice__(self, s: slice):
 
-        return tree.map_structure(lambda x: x[i: j], self[key])
+        i = s.start*self.max_seq_len if s.start is not None else None
+        j = s.stop*self.max_seq_len if s.stop is not None else None
+        step = s.step if s.step is not None else None
+        s_seq = slice(i,j,step)
+
+        d = dict(self)
+        seq_lens = d.pop(SampleBatch.SEQ_LENS)
+
+        sliced_batch = SampleBatch(trajectory_length=self.trajectory_length, max_seq_len=self.max_seq_len, **tree.map_structure(lambda x: x[s_seq], d))
+        sliced_batch.trajectory_length = len(sliced_batch[SampleBatch.OBS])
+        sliced_batch[SampleBatch.SEQ_LENS] = seq_lens[s]
+
+        return sliced_batch
 
 
     def __repr__(self):
-        return f"SampleBatch(size={self.batch_size}, content={list(self.keys())})"
+        return f"SampleBatch(size={self.trajectory_length}, content={list(self.keys())})"
 
     def set_item(self, batch, v):
-        batch[:, self.index] = v
-
-    def set_previous(self, batch):
-
-        # -1 is for "next obs"
-        batch[:, 0] = batch[:, -1]
+        batch[self.index] = v
 
     def get_owner(self):
         return super().__getitem__("policy_id")[0]
 
-    def compute_episode_slicing_indices(self):
-        # TODO: either run this in a loop, or at epsiode generation time
-        if self.episode_slicing_indices is None:
-            indices = []
-            for batch_id in range(self.batch_dim):
-                diff = np.diff(self[SampleBatch.EPISODE_ID][batch_id])
-                batch_indices = np.argwhere(diff!=0)[:, 0] +1
+    def pad_and_split_to_sequences(self):
+        """
+        :return: the batch split and padded into sequence bits
+        """
+        seq_lens = self[SampleBatch.SEQ_LENS]
+        new_traj_len = self.max_seq_len * len(seq_lens)
 
-                indices.append(batch_indices)
+        split_indices = np.cumsum(seq_lens)[:-1]
 
-            self.episode_slicing_indices = indices
+        def get_padding(element, seq_len):
+            rank = len(element.shape)
+            return ((0, self.max_seq_len-seq_len),) + ((0,0),) * (rank - 1)
+        def split_pad_concat(full_seq):
+            sequences = np.split(full_seq, split_indices, axis=0)
 
-    def split_by_episode(self, key):
-        self.compute_episode_slicing_indices()
-        return np.split(self[key], self.episode_slicing_indices)
+            return np.concatenate([
+                np.pad(seq, get_padding(seq, seq_len))
+                for seq, seq_len in zip(sequences, seq_lens)
+            ])
 
-    def get_seq_lens(self, max_seq_lens):
-        self.compute_episode_slicing_indices()
-        if self.seq_lens is None:
-            seq_lens = []
-            for batch_id in range(self.batch_dim):
-                new_episode_indices = [0] + list(self.episode_slicing_indices[batch_id]) + [self.batch_size]
-                batch_seq_lens = []
-                for i, index in enumerate(new_episode_indices[:-1]):
-                    delta = new_episode_indices[i+1] - index
-                    count = 0
-
-                    while count < delta:
-                        seq_len = min(max_seq_lens, delta-count)
-                        batch_seq_lens.append(seq_len)
-                        count += seq_len
-                seq_lens.append(np.array(batch_seq_lens, dtype=np.int32))
-            self.seq_lens = seq_lens
-
-        return self.seq_lens
+        d = dict(self)
+        seq_lens = d.pop(SampleBatch.SEQ_LENS)
+        new_batch = SampleBatch(trajectory_length=new_traj_len, max_seq_len=self.max_seq_len, **tree.map_structure(
+            split_pad_concat,
+            d
+        ))
+        new_batch[SampleBatch.SEQ_LENS] = seq_lens
 
 
+        return new_batch
 
 
 def concat_sample_batches(batches: List[SampleBatch]):
@@ -186,11 +174,9 @@ def concat_sample_batches(batches: List[SampleBatch]):
     :param batches: Batches to concatenate
     :return:
     """
-    batch_dim = sum(b.batch_dim for b in batches)
+    traj_len = sum(b.trajectory_length for b in batches)
 
-    new_batch = SampleBatch(batches[0].batch_size)
-    new_batch.compression = False
-    new_batch.batch_dim = batch_dim
+    new_batch = SampleBatch(traj_len, max_seq_len=batches[0].max_seq_len)
 
 
     all_keys = {*batches[0].keys()}
@@ -199,11 +185,15 @@ def concat_sample_batches(batches: List[SampleBatch]):
     #        the problem comes from the fact that we cant concat two batches as of right now.
     #        instantiate two different columns ? we could...
     for key in all_keys:
-        new_batch[key] = tree.map_structure(
-            lambda *b: np.concatenate(b, axis=0), # np.insert(np.concatenate(b, axis=0), 0, 0, axis=0)
-            *(bb[key] for bb in batches)
-        )
-
+        if key == SampleBatch.SEQ_LENS:
+            new_batch[SampleBatch.SEQ_LENS] = np.concatenate([
+                bb[SampleBatch.SEQ_LENS] for bb in batches
+            ], axis=0)
+        else:
+            new_batch[key] = tree.map_structure(
+                lambda *b: np.concatenate(b, axis=0), # np.insert(np.concatenate(b, axis=0), 0, 0, axis=0)
+                *(bb[key] for bb in batches)
+            )
 
     return new_batch
 
@@ -215,42 +205,76 @@ class ExperienceQueue:
             config: ConfigDict,
     ):
         self.config = config
-        self.queue = []
+        self.queue: SampleBatch = None
+
+        self.seq_len = self.config.max_seq_len if self.config.max_seq_len is not None else self.config.trajectory_length
 
     def push(self, batches: List[SampleBatch]):
         if len({b.get_owner() for b in batches}) != 1:
             raise ValueError("Pushing to queue experience from different policies!")
 
-        self.queue.extend(batches)
-        if len(self.queue) > self.config.max_queue_size:
-            print(f"Experience queue is too long !: {len(self.queue)} samples waiting.")
+        if self.queue is None:
+            self.queue = concat_sample_batches(batches)
+        else:
+            self.queue = concat_sample_batches([self.queue]+batches)
+
+        if self.queue.size() > self.config.max_queue_size:
+            print(f"Experience queue is too long !: {self.queue.size()} samples waiting.")
 
     def pull(self, num_samples):
-
-        if num_samples % self.config.batch_size != 0:
-            raise ValueError(f"The number of samples pulled from the queue must be a multiple of the batch_size. "
-                             f"Batch size = {self.config.batch_size}, Number of samples requested = {num_samples}")
+        # if num_batches % self.config.batch_size != 0:
+        #     raise ValueError(f"The number of samples pulled from the queue must be a multiple of the batch_size. "
+        #                      f"Batch size = {self.config.batch_size}, Number of samples requested = {num_samples}")
         assert self.is_ready()
-        num_batches = num_samples // self.config.batch_size
-        samples = self.queue[:num_samples]
+
+        assert num_samples % self.seq_len == 0, (num_samples, self.seq_len)
+        num_batches = num_samples // self.seq_len
+
+        samples = self.queue[:num_batches]
         self.queue = self.queue[num_batches:]
-        return concat_sample_batches(samples)
+
+        return samples
 
     def is_ready(self):
-        return len(self.queue) * self.config.batch_size >= self.config.train_batch_size
+        return self.queue is not None and (self.queue.size() >= self.config.train_batch_size)
+
+    def size(self):
+        return 0 if self.queue is None else self.queue.size()
 
 
 if __name__ == '__main__':
 
-    q = SampleBatch(20)
-    q2 = SampleBatch(20)
+    q = SampleBatch(20, max_seq_len=5)
+    q2 = SampleBatch(20, max_seq_len=5)
+    ep_id = 0
+    t = 0
     for i in range(20):
-        q.push({SampleBatch.OBS   : np.array([1, 2]), SampleBatch.ACTION: 2, SampleBatch.EPISODE_ID: i // 4,
-                SampleBatch.REWARD: np.float32(np.random.randint(5)), SampleBatch.DONE: np.random.random() < 0.1})
-    for i in range(20):
-        q2.push({SampleBatch.OBS   : np.array([1, 2]), SampleBatch.ACTION: 2, SampleBatch.EPISODE_ID: i // 5,
-                SampleBatch.REWARD: np.float32(np.random.randint(5)), SampleBatch.DONE: np.random.random() < 0.1})
+        done = np.random.random() < 0.1
+        q.push({SampleBatch.OBS   : np.array([1, 2]), SampleBatch.ACTION: 2, SampleBatch.EPISODE_ID: ep_id,
+                SampleBatch.REWARD: np.float32(np.random.randint(5)), SampleBatch.DONE: done,
+                SampleBatch.T : t})
+        t += 1
+        if done:
+            ep_id += 1
+            t = 0
 
+    t = 0
+    ep_id = 25
+    for i in range(20):
+        done = np.random.random() < 0.1
+
+        q2.push({SampleBatch.OBS   : np.array([1, 2]), SampleBatch.ACTION: 2, SampleBatch.EPISODE_ID: ep_id,
+                SampleBatch.REWARD: np.float32(np.random.randint(5)), SampleBatch.DONE: done, SampleBatch.T : t})
+        t += 1
+        if done:
+            t = 0
+            ep_id += 1
+    q = concat_sample_batches([q, q2])
+    padded_batch = q.pad_and_split_to_sequences()
+    print(padded_batch[SampleBatch.DONE], padded_batch[SampleBatch.SEQ_LENS])
+    trunc_batch = padded_batch[:5]
+    print(trunc_batch[SampleBatch.DONE], trunc_batch[SampleBatch.SEQ_LENS])
+    exit()
     q = concat_sample_batches([q, q2])
     q.compute_episode_slicing_indices()
     print(q.episode_slicing_indices)

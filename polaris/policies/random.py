@@ -14,8 +14,8 @@ class RandomPolicy(Policy):
             name="RandomPolicy",
             action_space=action_space,
             observation_space=None,
-            model=None,
             config=config,
+            policy_config=None
         )
 
     def compute_action(

@@ -1,10 +1,10 @@
-from typing import Dict, List
+from typing import Dict, List, Type
 
 import tree
 from gymnasium import Space
 from ml_collections import ConfigDict
 
-from .policy import Policy
+from .parametrised import ParametrisedPolicy
 from polaris import SampleBatch
 from polaris.models.utils.gae import compute_gae
 import tensorflow as tf
@@ -13,7 +13,7 @@ from polaris.models.utils.misc import explained_variance
 import numpy as np
 
 
-class A3CPolicy(Policy):
+class A3CPolicy(ParametrisedPolicy):
     policy_type = "parametrised"
 
     def __init__(
@@ -21,7 +21,7 @@ class A3CPolicy(Policy):
             name: str,
             action_space: Space,
             observation_space: Space,
-            model: BaseModel,
+            model: Type[BaseModel],
             config: ConfigDict,
     ):
         super().__init__(
@@ -54,54 +54,60 @@ class A3CPolicy(Policy):
         super().train(input_batch)
 
         metrics = self._train(
-            input_batch=input_batch
+            input_batch=dict(input_batch)
         )
 
         return metrics
 
-
     @tf.function
     def _train(
             self,
-            input_batch: SampleBatch
+            input_batch
     ):
-        B, T = tf.shape(input_batch[SampleBatch.OBS])
+        #B, T = tf.shape(input_batch[SampleBatch.OBS])
         with tf.GradientTape() as tape:
             with tf.device('/gpu:0'):
                 action_logits, state = self.model(
                     input_batch
                 )
-                action_logits = action_logits[:-1]
-                action_logp = self.model.action_dist.logp(action_logits)
-                entropy = self.model.action_dist.entropy()
-                vf_preds = self.model.value_function()
+                action_logits = action_logits[:, :-1]
+                action_dist = self.model.action_dist(action_logits)
+                action_logp = action_dist.logp(input_batch[SampleBatch.ACTION])
+                entropy = action_dist.entropy()
+                all_vf_preds = self.model.value_function()
+                vf_preds = all_vf_preds[:, :-1]
+                next_vf_pred = all_vf_preds[:, -1]
 
-                smoothed_returns = compute_gae(
+                values = compute_gae(
                 rewards=input_batch[SampleBatch.REWARD],
                 dones=input_batch[SampleBatch.DONE],
-                values=vf_preds[:, -1],
+                values=vf_preds,
                 discount=self.policy_config.discount,
                 gae_lambda=self.policy_config.gae_lambda,
-                bootstrap_v= vf_preds[:, -1]
+                bootstrap_v=next_vf_pred
                 )
 
-                advantage = tf.square(vf_preds - smoothed_returns)
-
-                critic_loss = 0.5 * advantage
-                policy_loss = action_logp * tf.stop_gradient(advantage) - self.policy_config.entropy_cost * entropy
+                #values = input_batch[SampleBatch.REWARD] + next_vf_pred * self.policy_config.discount * (1. - input_batch[SampleBatch.DONE])
+                advantage = values - vf_preds
+                critic_loss =  0.5 * tf.square(advantage)
+                policy_loss = - action_logp * tf.stop_gradient(advantage) - self.policy_config.entropy_cost * entropy
 
                 total_loss = tf.reduce_mean(policy_loss + critic_loss)
 
         gradients = tape.gradient(total_loss, self.model.trainable_variables)
-        self.model.optimiser.apply_gradient(gradients)
+        self.model.optimiser.apply_gradients(zip(gradients,self.model.trainable_variables))
 
         mean_entropy = tf.reduce_mean(entropy)
         mean_vf_loss = tf.reduce_mean(critic_loss)
         mean_pi_loss = tf.reduce_mean(policy_loss)
-        mean_grad_norm = tf.reduce_mean(gradients)
-        max_grad_norm = tf.reduce_max(gradients)
+        total_grad_norm = 0.
+        num_params = 0
+        for grad in gradients:
+            total_grad_norm += tf.reduce_sum(tf.abs(grad))
+            num_params += tf.size(grad)
+        mean_grad_norm = total_grad_norm / tf.cast(num_params, tf.float32)
         explained_vf = explained_variance(
-            tf.reshape(smoothed_returns, [-1]),
+            tf.reshape(values, [-1]),
             tf.reshape(vf_preds, [-1])
         )
 
@@ -110,40 +116,9 @@ class A3CPolicy(Policy):
             "mean_vf_loss": mean_vf_loss,
             "mean_pi_loss": mean_pi_loss,
             "mean_grad_norm": mean_grad_norm,
-            "max_grad_norm": max_grad_norm,
             "explained_vf": explained_vf,
         }
 
-    def compute_action(
-            self,
-            input_dict
-    ):
-
-        action_logits, state = self._compute_action_dist(
-            tree.map_structure(lambda v: [v], input_dict)
-        )
-        action_logits = tf.squeeze(action_logits).numpy()
-        action_dist = self.model.action_dist(action_logits)
-        action = action_dist.sample()
-        logp = action_dist.logp(action).numpy()
-        return action.numpy(), state, logp, action_logits
-
-    @tf.function-
-    def _compute_action_dist(
-            self,
-            input_dict
-    ):
-        return self.model(input_dict)
-
-
-    def get_weights(self):
-        return {v.name: v.numpy()
-                for v in self.model.trainable_variables}
-
-    def set_weights(self, weights: List):
-        x = {v.name: v for v in self.model.trainable_variables}
-        for name, v in x.items():
-            v.assign(weights[name])
 
 
 

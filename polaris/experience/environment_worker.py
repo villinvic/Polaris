@@ -23,6 +23,9 @@ class EnvWorker:
             worker_id: int,
             config: ConfigDict,
     ):
+        import tensorflow as tf
+        tf.compat.v1.enable_eager_execution()
+
         self.worker_id = worker_id
         self.config = config
 
@@ -31,15 +34,13 @@ class EnvWorker:
 
         # We can extend to multiple policy types if really needed, but won't be memory efficient
         PolicyCls = getattr(importlib.import_module(self.config.policy_path), self.config.policy_class)
-        ModelCls = getattr(importlib.import_module(self.config.model_path), self.config.model_class)
-
         self.policy_placeholders: Dict[str, Policy] = {
             f"parametrised_{aid}": PolicyCls(
                 name="placeholder",
                 action_space=self.env.action_space,
                 observation_space=self.env.observation_space,
-                model=ModelCls,
-                config=self.config
+                config=self.config,
+                policy_config=self.config.default_policy_config
             )
             for aid in self.env.get_agent_ids()
         }
@@ -48,7 +49,7 @@ class EnvWorker:
             self.policy_placeholders[f"random_{aid}"] = random_policy
 
         self.sample_buffer = {
-            aid: SampleBatch(self.config.batch_size) for aid in self.env.get_agent_ids()
+            aid: SampleBatch(self.config.trajectory_length, max_seq_len=self.config.max_seq_len) for aid in self.env.get_agent_ids()
         }
 
     def run_episode_for(self, agent_ids_to_policy_params: Dict[str, PolicyParams], episode_options=None) -> Generator:
@@ -61,13 +62,13 @@ class EnvWorker:
             aid: self.policy_placeholders[policy_params.policy_type + f"_{aid}"].setup(policy_params)
             for aid, policy_params in agent_ids_to_policy_params.items()
         }
-
+        episode = Episode(
+            self.env,
+            agents_to_policies,
+            self.config
+        )
         try:
-            for batches in Episode(
-                    self.env,
-                    agents_to_policies,
-                    self.config
-            ).run(
+            for batches in episode.run(
                 self.sample_buffer,
                 options=episode_options
             ):
@@ -82,7 +83,7 @@ class EnvWorker:
 
         # Episode finished
         # TODO : send metrics through here
-        yield self.worker_id, None
+        yield self.worker_id, episode.metrics
 
 if __name__ == '__main__':
     env = DummyEnv()
@@ -93,7 +94,7 @@ if __name__ == '__main__':
     config.policy_model_path = "polaris.policies.policy"
     config.policy_model_class = "DummyPolicy"
     config.policy_config = {}
-    config.batch_size = 8
+    config.trajectory_length = 8
     config.lock()
 
     workers = [EnvWorker.remote(worker_id=wid, config=config) for wid in range(1)]

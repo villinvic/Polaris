@@ -27,6 +27,10 @@ class CategoricalDistribution:
         self._compute_dist()
         return self.dist.entropy()
 
+    def kl(self, other):
+        self._compute_dist()
+        return self.dist.kl_divergence(tfp.distributions.Categorical(logits=other))
+
 
 
 

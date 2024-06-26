@@ -4,7 +4,6 @@ from polaris import SampleBatch
 from polaris.experience.sampling import concat_sample_batches
 
 
-@tf.function
 def compute_gae(rewards, dones, values,  discount, gae_lambda, bootstrap_v):
     """
     :param rewards: rewards, of shape [B, T]
@@ -17,7 +16,7 @@ def compute_gae(rewards, dones, values,  discount, gae_lambda, bootstrap_v):
     """
 
     def bellman(future, present):
-        v, r, d= present
+        v, r, d = present
         return (1. - gae_lambda) * v + gae_lambda * (r + (1.-d) * discount * future)
 
     reversed_sequence = [tf.reverse(t, [0]) for t in [

@@ -4,7 +4,7 @@ from sacred.observers import FileStorageObserver
 from ml_collections import ConfigDict
 
 # Create a new experiment
-ex = Experiment('A3C on cartpole')
+ex = Experiment('IMPALA on cartpole')
 
 # Add an observer to save the experiment's results
 ex.observers.append(FileStorageObserver('sacred_runs'))
@@ -19,18 +19,18 @@ def my_config():
     del env_obj
 
     num_workers = 4
-    policy_path = 'polaris.policies.A3C'
+    policy_path = 'polaris.policies.IMPALA'
     model_path = 'polaris.models.fc_model'
-    policy_class = 'A3CPolicy'
+    policy_class = 'IMPALA'
     model_class = 'FCModel'
     policy_config = {}
-    batch_size = 256
+    trajectory_length = 32
     max_queue_size = 10
-    train_batch_size = 2048
+    train_batch_size = 256
     policy_params = [dict(
-        name="A3C_policy"
+        name="IMPALA_policy"
     )]
-    tensorboard_logdir = 'cartpole_A3C'
+    tensorboard_logdir = 'cartpole_IMPALA'
     report_freq = 5
     model_config = {
         'lr': 0.0005,
@@ -41,7 +41,11 @@ def my_config():
     policy_config = {
         'discount'    : 0.99,
         'gae_lambda'  : 1.0,
-        'entropy_cost': 0.0
+        'entropy_cost': 0.001,
+        'popart_std_clip': 1e-2,
+        'popart_lr': 5e-1,
+        'grad_clip': 1.,
+        'max_seq_lens': 16,
     }
 
     episode_metrics_smoothing = 0.9

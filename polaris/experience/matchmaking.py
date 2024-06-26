@@ -1,4 +1,4 @@
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Union, Tuple, Any
 from abc import ABC
 
 import numpy as np
@@ -11,11 +11,11 @@ class MatchMaking(ABC):
     def __init__(
             self,
             agent_ids,
-            policies: List[Policy],
+            policy_params: Dict[str, PolicyParams],
             **kwargs
     ):
         self.agent_ids = agent_ids
-        self.policies = policies
+        self.policy_params = policy_params
 
     def next(
             self,
@@ -28,8 +28,8 @@ class RandomMatchmaking(MatchMaking):
     def next(
             self,
             **kwargs,
-    ) -> Dict[str, Policy]:
+    ) -> Tuple[Dict[str, PolicyParams], Any]:
 
         return {
-            aid: self.policies[np.random.choice(len(self.policies))].get_params() for aid in self.agent_ids
+            aid: list(self.policy_params.values())[np.random.choice(len(self.policy_params))] for aid in self.agent_ids
         }, None
