@@ -1,15 +1,14 @@
-from typing import Dict, List, Type
+from typing import Type
 
-import tree
 from gymnasium import Space
 from ml_collections import ConfigDict
 
 from .parametrised import ParametrisedPolicy
-from polaris import SampleBatch
-from polaris.models.utils.gae import compute_gae
+from polaris.experience import SampleBatch
+from polaris.policies.utils.gae import compute_gae
 import tensorflow as tf
 from polaris.models.base import BaseModel
-from polaris.models.utils.misc import explained_variance
+from polaris.policies.utils.misc import explained_variance
 import numpy as np
 
 

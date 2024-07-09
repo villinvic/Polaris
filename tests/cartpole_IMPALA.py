@@ -55,7 +55,7 @@ def my_config():
 def main(_config):
     import tensorflow as tf
     tf.compat.v1.enable_eager_execution()
-    from polaris.trainers.trainer import Trainer
+    from polaris.trainers.async_trainer import Trainer
 
 
     # TODO: seeding

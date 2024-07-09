@@ -36,6 +36,7 @@ class _GlobalCounter(GlobalVars):
 
 class _GlobalTimer(GlobalVars):
     PREV_ITERATION = "previous_iteration"
+    PREV_FRAMES = "previous_frames"
 
     def __init__(self):
         super().__init__(float)
@@ -125,13 +126,19 @@ class Metric:
         else:
             tf.summary.scalar(self.name, self._v, step=GlobalCounter[GlobalCounter.ENV_STEPS])
 
+class Metrics(dict): pass
+
 class MetricBank:
+
+    def __reduce__(self):
+        return MetricBank, self.args
 
     def __init__(
             self,
             dirname,
             report_dir="",
             report_freq=3,
+            metrics=Metrics(),
             ):
         """
 
@@ -139,13 +146,18 @@ class MetricBank:
         :param report_freq: frequency at which the bank reports to tensorboard (alleviates disk memory usage)
         """
 
-        self.metrics = {}
+        self.args = (dirname, report_dir, report_freq, metrics)
+
+        self.metrics = Metrics()
         self.logdir = PathManager(base_dir=report_dir).get_tensorboard_logdir(dirname)
         self.report_freq = report_freq
         self.last_report = -1
 
         import tensorflow as tf
         self.writer = tf.summary.create_file_writer(self.logdir)
+
+    def get(self):
+        return self.metrics
 
     def track_metric(self, name: str, init_value=np.nan, smoothing=0.0, n_init=1, save_history=False):
         # TODO : take care of hist, etc

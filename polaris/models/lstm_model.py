@@ -3,7 +3,7 @@ import tree
 from gymnasium.spaces import Discrete
 import tensorflow as tf
 
-from .. import SampleBatch
+from polaris.experience import SampleBatch
 
 tf.compat.v1.enable_eager_execution()
 
@@ -11,19 +11,7 @@ tf.compat.v1.enable_eager_execution()
 from .base import BaseModel
 from tensorflow.keras.optimizers import RMSprop
 import numpy as np
-from tensorflow.keras.layers import LSTM as tfLSTM
-
 from .utils.categorical_distribution import CategoricalDistribution
-
-
-
-class LSTM(snt.Module):
-    def __init__(self, size, name):
-        super().__init__(name)
-
-        self._lstm = tfLSTM(
-
-        )
 
 
 class LSTMModel(BaseModel):
@@ -118,7 +106,6 @@ class LSTMModel(BaseModel):
 
         hidden, cell = tf.split(state, 2)
 
-        # TODO: make everything time major ?
         lstm_out, states_out = snt.static_unroll(
             self._lstm,
             input_sequence=lstm_input,

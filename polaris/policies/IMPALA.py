@@ -1,22 +1,17 @@
 import time
-from typing import Type
 
 import tree
-from gymnasium import Space
-from ml_collections import ConfigDict
 
 from .parametrised import ParametrisedPolicy
-from polaris import SampleBatch
-import sonnet as snt
+from polaris.experience import SampleBatch
 
 import numpy as np
 import tensorflow as tf
 tf.compat.v1.enable_eager_execution()
 
-from .popart import Popart
-from polaris.models import BaseModel
-from polaris.models.utils.misc import explained_variance
-from polaris.models.utils.vtrace import compute_vtrace
+from polaris.policies.utils.popart import Popart
+from polaris.policies.utils.misc import explained_variance
+from polaris.policies.utils.vtrace import compute_vtrace
 class IMPALA(ParametrisedPolicy):
 
     def __init__(
@@ -104,7 +99,7 @@ class IMPALA(ParametrisedPolicy):
                 kl = tf.boolean_mask(action_dist.kl(input_batch[SampleBatch.ACTION_LOGITS]), mask)
                 behavior_logp = input_batch[SampleBatch.ACTION_LOGP]
                 entropy = tf.boolean_mask(action_dist.entropy(), mask)
-                # TODO: check if mask is helping ?
+                # TODO: check on VMPO for how we did masking
                 all_vf_preds = self.model.value_function() * tf.cast(mask_all, tf.float32)
                 vf_preds = all_vf_preds[:-1]
                 unnormalised_all_vf_preds = self.popart_module.unnormalise(all_vf_preds)
@@ -112,7 +107,7 @@ class IMPALA(ParametrisedPolicy):
                 unnormalised_next_vf_pred = unnormalised_all_vf_preds[1:]
                 unnormalised_bootstrap_v = unnormalised_all_vf_preds[-1]
                 rhos = tf.exp(action_logp - behavior_logp)
-                clipped_rhos= tf.minimum(1.0, rhos, name='cs')
+                clipped_rhos= tf.stop_gradient(tf.minimum(1.0, rhos, name='cs'))
 
                 # TODO: See sequence effect on the vtrace !
                 # We are not masking the initial values there... maybe the values must be masked ?

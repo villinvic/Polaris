@@ -5,7 +5,7 @@ from ml_collections import ConfigDict
 import tensorflow as tf
 from tensorflow.keras.optimizers import Optimizer
 
-from polaris import SampleBatch
+from polaris.experience import SampleBatch
 
 
 def expand_values(v):

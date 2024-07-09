@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from polaris import SampleBatch
+from polaris.experience import SampleBatch
 from polaris.experience.sampling import concat_sample_batches
 
 

@@ -14,6 +14,7 @@ def compute_vtrace(
         discount,
         clipped_rhos,
         bootstrap_v,
+        mask
 
 ) -> VtraceReturns:
     """
@@ -24,6 +25,7 @@ def compute_vtrace(
     :param discount: discount factor
     :param clipped_rhos: clipped fraction between the online and behavior distributions
     :param bootstrap_v: estimated value at time T+1
+    :param mask: sequence mask
     :return: vtrace
     """
 
@@ -31,13 +33,13 @@ def compute_vtrace(
         discount_t, c_t, delta_t = present
         return delta_t + discount_t * c_t * future
 
-    discounts = (1.-tf.cast(dones, tf.float32)) * discount
-    detlas = clipped_rhos * (rewards + discounts * next_values - values)
+    discounts = (1.-tf.cast(dones, tf.float32)) * tf.cast(mask, tf.float32) * discount
+    deltas = clipped_rhos * (rewards + discounts * next_values - values)
 
     sequence = (
         discounts,
         clipped_rhos,
-        detlas,
+        deltas,
     )
     vs_minus_v_xs = tf.scan(
         bellman,

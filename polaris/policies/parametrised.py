@@ -6,7 +6,7 @@ from .policy import Policy
 import tree
 import tensorflow as tf
 
-from polaris import SampleBatch
+from polaris.experience import SampleBatch
 
 class ParametrisedPolicy(Policy):
     policy_type = "parametrised"

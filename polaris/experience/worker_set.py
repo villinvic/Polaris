@@ -5,7 +5,7 @@ import ray
 
 from .environment_worker import EnvWorker
 from .episode import EpisodeMetrics
-from .. import SampleBatch
+from .sampling import SampleBatch
 
 
 class WorkerSet:

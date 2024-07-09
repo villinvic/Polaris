@@ -30,7 +30,7 @@ class EnvWorker:
         self.config = config
 
         # Init environment
-        self.env = PolarisEnv.make(self.config.env)
+        self.env = PolarisEnv.make(self.config.env, env_index=self.worker_id)
 
         # We can extend to multiple policy types if really needed, but won't be memory efficient
         PolicyCls = getattr(importlib.import_module(self.config.policy_path), self.config.policy_class)
@@ -52,8 +52,7 @@ class EnvWorker:
             aid: SampleBatch(self.config.trajectory_length, max_seq_len=self.config.max_seq_len) for aid in self.env.get_agent_ids()
         }
 
-    def run_episode_for(self, agent_ids_to_policy_params: Dict[str, PolicyParams], episode_options=None) -> Generator:
-
+    def run_episode_for(self, agent_ids_to_policy_params: Dict[str, PolicyParams]) -> Generator:
         # Init environment
         if self.env is None:
             self.env = PolarisEnv.make(self.config.env)
@@ -70,7 +69,6 @@ class EnvWorker:
         try:
             for batches in episode.run(
                 self.sample_buffer,
-                options=episode_options
             ):
                 yield self.worker_id, batches
 
@@ -82,7 +80,6 @@ class EnvWorker:
             # TODO : recall run_episode_for
 
         # Episode finished
-        # TODO : send metrics through here
         yield self.worker_id, episode.metrics
 
 if __name__ == '__main__':

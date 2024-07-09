@@ -8,7 +8,7 @@ from gymnasium.spaces import Space
 from ml_collections import ConfigDict
 from polaris.models.base import BaseModel
 
-from polaris import SampleBatch
+from polaris.experience import SampleBatch
 
 
 class Policy(ABC):
@@ -21,11 +21,13 @@ class Policy(ABC):
             observation_space: Space,
             config: ConfigDict,
             policy_config: ConfigDict,
+            **kwargs,
     ):
         self.name = name
         self.action_space = action_space
         self.observation_space = observation_space
         self.version = 1
+        self.options = None
         self.config = config
         self.policy_config = policy_config
         self.model_class = getattr(importlib.import_module(self.config.model_path), self.config.model_class)
@@ -62,6 +64,7 @@ class Policy(ABC):
         self.set_weights(weights=policy_params.weights)
         self.policy_config.update(**policy_params.config)
         self.version = policy_params.version
+        self.options = policy_params.options
         return self
 
     @abstractmethod
@@ -79,6 +82,7 @@ class Policy(ABC):
             name=self.name,
             weights=self.get_weights(),
             config=self.policy_config,
+            options=self.options,
             version=self.version,
             policy_type=self.policy_type
         )
@@ -108,5 +112,9 @@ class PolicyParams(NamedTuple):
     name: str = "unnamed"
     weights: dict = {}
     config: ConfigDict = ConfigDict()
+    options: ConfigDict = ConfigDict()
     version: int = 0
     policy_type: str = "parametrised"
+
+class ParamsMap(dict):
+    pass

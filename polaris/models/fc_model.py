@@ -6,7 +6,7 @@ from .base import BaseModel
 from tensorflow.keras.optimizers import RMSprop
 
 from .utils.categorical_distribution import CategoricalDistribution
-from .. import SampleBatch
+from polaris.experience import SampleBatch
 
 
 class FCModel(BaseModel):

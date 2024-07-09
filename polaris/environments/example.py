@@ -99,7 +99,7 @@ class PolarisLunarLander(LunarLander, PolarisEnv):
 
         self._agent_ids = {0}
         self.t = 0
-        self.max_t = 128*7
+        self.max_t = 8192*2
 
     def reset(
         self,
@@ -126,7 +126,7 @@ class PolarisLunarLander(LunarLander, PolarisEnv):
         d[2][0] = d[2][0] or timeout
         d[2]["__all__"] = d[2][0]
         d[3]["__all__"] = False
-        d[1][0] = d[1][0] * 0.01 - float(timeout)
+        d[1][0] = d[1][0] #* 0.01
 
 
         return d

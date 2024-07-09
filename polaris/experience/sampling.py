@@ -1,6 +1,4 @@
-import queue
 from typing import List
-
 import numpy as np
 from ml_collections import ConfigDict
 import tree
@@ -76,7 +74,7 @@ class SampleBatch(dict):
     def size(self):
         return self.trajectory_length
 
-    def push(self, data):
+    def push(self, data, flush=False):
         if self.is_full():
             self.reset()
 
@@ -104,12 +102,44 @@ class SampleBatch(dict):
         if self.is_full():
             assert sum(self[SampleBatch.SEQ_LENS])==self.trajectory_length, f"Seq_lens not summing to {self.trajectory_length}"
             return [self]
+        elif flush:
+            # TODO: on hold
+            # we fill the remaining with dones and appropriate seq len
+            remaining = self.index - sum(self[SampleBatch.SEQ_LENS])
+            self[SampleBatch.SEQ_LENS].append(remaining)
+            self[SampleBatch.POLICY_ID][-remaining:] = self[SampleBatch.POLICY_ID][0]
+            for k, v in self.items():
+                if k == SampleBatch.POLICY_ID:
+                    v[-remaining:] = self[SampleBatch.POLICY_ID][0]
+                elif k == SampleBatch.SEQ_LENS:
+                    pass
+                else:
+                    self[k][-remaining:] = 0
+
+            self.index = self.trajectory_length
+
+            # last_seq_len = self.index - sum(self[SampleBatch.SEQ_LENS])
+            # self[SampleBatch.SEQ_LENS].append(last_seq_len)
+            # truncated = self[:self.index]
+            # self.index = self.trajectory_length
+            # return [truncated]
         return []
         # when full, reset and send batch
 
     def is_full(self):
         return self.trajectory_length == self.index
 
+    def truncate(self, index):
+        # Unused
+
+        d = dict(self)
+        seq_lens = d.pop(SampleBatch.SEQ_LENS)
+
+        truncated = SampleBatch(trajectory_length=self.trajectory_length, max_seq_len=self.max_seq_len, **tree.map_structure(lambda x: x[s_seq], d))
+        truncated.trajectory_length = len(truncated[SampleBatch.OBS])
+        sliced_batch[SampleBatch.SEQ_LENS] = seq_lens
+
+        return sliced_batch
     def __getslice__(self, s: slice):
 
         i = s.start*self.max_seq_len if s.start is not None else None
@@ -134,6 +164,7 @@ class SampleBatch(dict):
         batch[self.index] = v
 
     def get_owner(self):
+        assert np.all(super().__getitem__("policy_id")[0] == super().__getitem__("policy_id")), super().__getitem__("policy_id")
         return super().__getitem__("policy_id")[0]
 
     def pad_and_split_to_sequences(self):
@@ -178,13 +209,7 @@ def concat_sample_batches(batches: List[SampleBatch]):
 
     new_batch = SampleBatch(traj_len, max_seq_len=batches[0].max_seq_len)
 
-
-    all_keys = {*batches[0].keys()}
-
-    # TODO : how should we handle prev obs, etc. ?
-    #        the problem comes from the fact that we cant concat two batches as of right now.
-    #        instantiate two different columns ? we could...
-    for key in all_keys:
+    for key in batches[0]:
         if key == SampleBatch.SEQ_LENS:
             new_batch[SampleBatch.SEQ_LENS] = np.concatenate([
                 bb[SampleBatch.SEQ_LENS] for bb in batches
