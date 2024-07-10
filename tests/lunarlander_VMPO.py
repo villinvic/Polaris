@@ -61,12 +61,12 @@ def my_config():
         name="VMPO_policy1",
         config=default_policy_config.copy()
     ),
-        # dict(
-        #     name="VMPO_policy2",
-        #     config=default_policy_config.copy()
-        # )
+        dict(
+            name="VMPO_policy2",
+            config=default_policy_config.copy()
+        )
     ]
-    #policy_params[1]["config"]["lr"] = 2e-3
+    policy_params[1]["config"]["lr"] = 3e-3
 
     tensorboard_logdir = 'lunarlander_VMPO'
     report_freq = 5

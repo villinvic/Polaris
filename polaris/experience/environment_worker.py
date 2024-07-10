@@ -3,15 +3,15 @@ from typing import Dict, Generator
 import numpy as np
 from ml_collections import ConfigDict
 import ray
+
+from polaris.policies import Policy, PolicyParams, RandomPolicy
 from polaris.experience.sampling import SampleBatch
 from polaris.experience.episode import Episode
 from polaris.environments.polaris_env import PolarisEnv
-from polaris.policies.policy import PolicyParams, Policy
-from polaris.policies.random import RandomPolicy
+
+
 
 import importlib
-
-from polaris.environments.example import DummyEnv, PolarisCartPole
 
 
 @ray.remote(num_cpus=1, num_gpus=0)
@@ -30,7 +30,7 @@ class EnvWorker:
         self.config = config
 
         # Init environment
-        self.env = PolarisEnv.make(self.config.env, env_index=self.worker_id)
+        self.env = PolarisEnv.make(self.config.env, env_index=self.worker_id, **self.config.env_config)
 
         # We can extend to multiple policy types if really needed, but won't be memory efficient
         PolicyCls = getattr(importlib.import_module(self.config.policy_path), self.config.policy_class)
@@ -40,6 +40,7 @@ class EnvWorker:
                 action_space=self.env.action_space,
                 observation_space=self.env.observation_space,
                 config=self.config,
+                options={},
                 policy_config=self.config.default_policy_config
             )
             for aid in self.env.get_agent_ids()
@@ -55,7 +56,7 @@ class EnvWorker:
     def run_episode_for(self, agent_ids_to_policy_params: Dict[str, PolicyParams]) -> Generator:
         # Init environment
         if self.env is None:
-            self.env = PolarisEnv.make(self.config.env)
+            self.env = PolarisEnv.make(self.config.env, env_index=self.worker_id, **self.config.env_config)
 
         agents_to_policies = {
             aid: self.policy_placeholders[policy_params.policy_type + f"_{aid}"].setup(policy_params)
@@ -83,6 +84,8 @@ class EnvWorker:
         yield self.worker_id, episode.metrics
 
 if __name__ == '__main__':
+    from polaris.environments.example import DummyEnv
+
     env = DummyEnv()
     env.register()
 

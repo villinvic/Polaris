@@ -32,11 +32,10 @@ class WorkerSet:
     ):
         job_refs = []
         hired_workers = set()
-        for wid, (job, episode_options) in zip(self.available_workers, jobs):
+        for wid, job in zip(self.available_workers, jobs):
             hired_workers.add(wid)
             job_refs.append(self.workers[wid].run_episode_for.remote(
-                job,
-                episode_options
+                job
             ))
         self.available_workers -= hired_workers
 

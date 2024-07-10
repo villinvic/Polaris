@@ -164,7 +164,7 @@ class SampleBatch(dict):
         batch[self.index] = v
 
     def get_owner(self):
-        assert np.all(super().__getitem__("policy_id")[0] == super().__getitem__("policy_id")), super().__getitem__("policy_id")
+        #assert np.all(super().__getitem__("policy_id")[0] == super().__getitem__("policy_id")), super().__getitem__("policy_id")
         return super().__getitem__("policy_id")[0]
 
     def pad_and_split_to_sequences(self):

@@ -75,7 +75,7 @@ class Episode:
         }
         dones["__all__"] = False
         observations, infos = self.env.reset(options={
-            aid: p.options for aid, p in self.agents_to_policies
+            aid: p.options for aid, p in self.agents_to_policies.items()
         })
 
         t = 0
@@ -104,7 +104,7 @@ class Episode:
                 rewards,
                 dones,
                 infos,
-                self.metrics
+                self.custom_metrics
             )
 
             batches = []
@@ -159,13 +159,20 @@ class Episode:
             if len(batches) > 0:
                 self.callbacks.on_trajectory_end(
                     self.agents_to_policies,
-                    batches
+                    batches,
+                    self.custom_metrics
                 )
                 yield batches
             observations = next_observations
             prev_rewards = rewards
             prev_actions = actions
             t += 1
+
+        self.callbacks.on_episode_end(
+            self.agents_to_policies,
+            self.env.get_episode_metrics(),
+            self.custom_metrics
+        )
 
         self.metrics = EpisodeMetrics(
             stepping_time_ms=1000.*np.float32(time.time()-t1) / t,

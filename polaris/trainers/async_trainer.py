@@ -33,7 +33,7 @@ class AsyncTrainer(Checkpointable):
         )
 
         # Init environment
-        self.env = PolarisEnv.make(self.config.env)
+        self.env = PolarisEnv.make(self.config.env, env_index=-1, **self.config.env_config)
 
         # We can extend to multiple policy types if really needed, but won't be memory efficient
         policy_params = [
@@ -48,6 +48,7 @@ class AsyncTrainer(Checkpointable):
                 observation_space=self.env.observation_space,
                 config=self.config,
                 policy_config=policy_param.config,
+                options=policy_param.options,
                 # For any algo that needs to track either we have the online model
                 is_online=True,
             )
@@ -229,7 +230,7 @@ class AsyncTrainer(Checkpointable):
 
         # We should call those only at the report freq...
         self.metricbank.update(
-            tree.flatten_with_path(GlobalCounter.get()), prefix="counters/", smoothing=0.9
+            tree.flatten_with_path(GlobalCounter.get()), prefix="counters/"
         )
         # self.metrics.update(
         #     tree.flatten_with_path(GlobalCounter), prefix="timers/", smoothing=0.9

@@ -6,10 +6,8 @@ from typing import NamedTuple, Dict, Type
 import numpy as np
 from gymnasium.spaces import Space
 from ml_collections import ConfigDict
-from polaris.models.base import BaseModel
 
 from polaris.experience import SampleBatch
-
 
 class Policy(ABC):
     policy_type = "abstract"
@@ -20,6 +18,7 @@ class Policy(ABC):
             action_space: Space,
             observation_space: Space,
             config: ConfigDict,
+            options: ConfigDict,
             policy_config: ConfigDict,
             **kwargs,
     ):
@@ -27,7 +26,7 @@ class Policy(ABC):
         self.action_space = action_space
         self.observation_space = observation_space
         self.version = 1
-        self.options = None
+        self.options = options
         self.config = config
         self.policy_config = policy_config
         self.model_class = getattr(importlib.import_module(self.config.model_path), self.config.model_class)

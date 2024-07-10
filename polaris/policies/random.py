@@ -15,6 +15,7 @@ class RandomPolicy(Policy):
             action_space=action_space,
             observation_space=None,
             config=config,
+            options={},
             policy_config=None
         )
 

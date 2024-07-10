@@ -6,7 +6,7 @@
 #from .matchmaking import MatchMaking, RandomMatchmaking
 
 from .sampling import SampleBatch
-from .environment_worker import EnvWorker
+# from .environment_worker import EnvWorker
 from .episode import Episode
 from .episode_callbacks import EpisodeCallbacks
 from .matchmaking import MatchMaking

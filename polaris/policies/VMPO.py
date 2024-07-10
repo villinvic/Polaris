@@ -151,11 +151,18 @@ class VMPO(ParametrisedPolicy):
         seq_lens = d.pop(SampleBatch.SEQ_LENS)
         time_major_batch = tree.map_structure(make_time_major, d)
 
-        time_major_batch[SampleBatch.OBS] = np.concatenate([time_major_batch[SampleBatch.OBS], time_major_batch[SampleBatch.NEXT_OBS][-1:]], axis=0)
+        def add_last_timestep(v1, v2):
+            return np.concatenate([v1, v2[-1:]], axis=0)
+
+
+        time_major_batch[SampleBatch.OBS] = tree.map_structure(
+            add_last_timestep,
+            time_major_batch[SampleBatch.OBS], time_major_batch[SampleBatch.NEXT_OBS]
+        )
+
         time_major_batch[SampleBatch.PREV_REWARD] = np.concatenate([time_major_batch[SampleBatch.PREV_REWARD], time_major_batch[SampleBatch.REWARD][-1:]], axis=0)
         time_major_batch[SampleBatch.PREV_ACTION] = np.concatenate([time_major_batch[SampleBatch.PREV_ACTION], time_major_batch[SampleBatch.ACTION][-1:]], axis=0)
         time_major_batch[SampleBatch.STATE] = [state[0] for state in time_major_batch[SampleBatch.STATE]]
-
         time_major_batch[SampleBatch.SEQ_LENS] = seq_lens
 
         # Sequence is one step longer if we are not done at timestep T
@@ -165,6 +172,7 @@ class VMPO(ParametrisedPolicy):
                            )] += 1
 
         nn_train_time = time.time()
+
 
         metrics = self._train(
             input_batch=time_major_batch

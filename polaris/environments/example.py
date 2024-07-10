@@ -92,10 +92,11 @@ class PolarisCartPole(CartPoleEnv, PolarisEnv):
 
 class PolarisLunarLander(LunarLander, PolarisEnv):
 
-    def __init__(self, *args, **kwargs):
+    env_id = "lunarlander"
 
-        PolarisEnv.__init__(self, env_id="lunarlander")
-        LunarLander.__init__(self, *args, **kwargs)
+    def __init__(self, *args, env_index=None, **config):
+        PolarisEnv.__init__(self, env_index=env_index, **config)
+        LunarLander.__init__(self, *args, **config)
 
         self._agent_ids = {0}
         self.t = 0

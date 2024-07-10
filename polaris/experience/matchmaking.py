@@ -4,8 +4,6 @@ from abc import ABC
 
 import numpy as np
 
-from polaris.policies.policy import Policy, PolicyParams
-
 
 class MatchMaking(ABC):
 
@@ -18,9 +16,9 @@ class MatchMaking(ABC):
 
     def next(
             self,
-            params_map: Dict[str, PolicyParams],
+            params_map: Dict[str, "PolicyParams"],
             **kwargs,
-    ) -> Dict[str, PolicyParams]:
+    ) -> Dict[str, "PolicyParams"]:
         pass
 
     def update(self, **kwargs):
@@ -33,9 +31,9 @@ class RandomMatchmaking(MatchMaking):
 
     def next(
             self,
-            params_map: Dict[str, PolicyParams],
+            params_map: Dict[str, "PolicyParams"],
             **kwargs,
-    ) -> Dict[str, PolicyParams]:
+    ) -> Dict[str, "PolicyParams"]:
 
         return {
             aid: list(params_map.values())[np.random.choice(len(params_map))] for aid in self.agent_ids
@@ -51,7 +49,7 @@ class TwoPlayerEloRanking(MatchMaking):
     def __init__(
             self,
             agent_ids,
-            policy_params: Dict[str, PolicyParams],
+            policy_params: Dict[str, "PolicyParams"],
             initial_elo=1000,
             initial_lr=40,
             annealing=0.99,
@@ -77,9 +75,9 @@ class TwoPlayerEloRanking(MatchMaking):
 
     def next(
             self,
-            params_map: Dict[str, PolicyParams],
+            params_map: Dict[str, "PolicyParams"],
             **kwargs,
-    ) -> Dict[str, PolicyParams]:
+    ) -> Dict[str, "PolicyParams"]:
         # Do not make players play against themselves
         policy_params = list(params_map.values())
         return {
