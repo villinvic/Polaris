@@ -74,10 +74,10 @@ class EnvWorker:
                 yield self.worker_id, batches
 
         except Exception as e:
-            print("TODO: restart env if failed")
-            print(e)
-            raise e
+            print("Restarting environment:", e)
             self.env.close()
+            time.sleep(2)
+            self.env = PolarisEnv.make(self.config.env, env_index=self.worker_id, **self.config.env_config)
             # TODO : recall run_episode_for
 
         # Episode finished

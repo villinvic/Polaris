@@ -13,6 +13,8 @@ setup(
     "ray[tune]",
     "gymnasium>=0.27.1",
     "tensorflow>=2.12.0",
+    "tensorflow_probability",
+    "tf_keras",
     "dm-sonnet==2.0.2",
     "ml_collections",
     "sacred",

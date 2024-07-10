@@ -4,6 +4,7 @@ from typing import Iterator, List, NamedTuple, Dict
 
 import numpy as np
 from ml_collections import ConfigDict
+from gymnasium.error import ResetNeeded
 
 from .sampling import SampleBatch
 
@@ -93,7 +94,15 @@ class Episode:
                     }
                 )
 
-            next_observations, rewards, dones, truncs, infos = self.env.step(actions)
+            try:
+                next_observations, rewards, dones, truncs, infos = self.env.step(actions)
+            except ResetNeeded:
+                for sample_batch in sample_batches.items():
+                    sample_batch.reset()
+                raise ResetNeeded
+
+
+
             dones["__all__"] = dones["__all__"] or truncs["__all__"]
 
             self.callbacks.on_step(
