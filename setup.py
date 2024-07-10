@@ -10,8 +10,11 @@ setup(
     install_requires=[
     "dm_tree",
     "ray==2.9.0",
+    "ray[tune]",
     "gymnasium>=0.27.1",
     "tensorflow>=2.12.0",
     "dm-sonnet==2.0.2",
+    "ml_collections",
+    "sacred",
     ]
 )

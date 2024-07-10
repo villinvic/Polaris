@@ -2,7 +2,7 @@ import threading
 import time
 from collections import defaultdict
 
-from ray.experimental.tf_utils import tf
+import tensorflow as tf
 
 from .paths import PathManager
 import numpy as np
