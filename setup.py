@@ -9,5 +9,9 @@ setup(
     packages=find_packages(exclude=('tests', 'docs')),
     install_requires=[
     "dm_tree",
+    "ray==2.9.0",
+    "gymnasium>=0.27.1",
+    "tensorflow>=2.12.0",
+    "dm-sonnet==2.0.2",
     ]
 )
