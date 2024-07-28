@@ -121,7 +121,7 @@ class LSTMModel(BaseModel):
         pi_out = self._pi_out(lstm_out)
         self._values = tf.squeeze(self._value_out(lstm_out))
 
-        return pi_out, states_out
+        return (pi_out, states_out), self._values
 
     def get_initial_state(self):
         return [np.zeros((self.config.lstm_size,), dtype=np.float32) for _ in range(2)]
@@ -137,7 +137,7 @@ class LSTMModel(BaseModel):
         batch_input_dict[SampleBatch.STATE] = [tf.expand_dims(state, axis=0) for state in states
                                                ]
 
-        action_logits, state = self._compute_action_dist(
+        (action_logits, state), values = self._compute_action_dist(
             batch_input_dict
         )
 
@@ -145,5 +145,5 @@ class LSTMModel(BaseModel):
         action_dist = self.action_dist(action_logits)
         action = action_dist.sample()
         logp = action_dist.logp(action).numpy()
-        return action.numpy(), state, logp, action_logits
+        return action.numpy(), state, logp, action_logits, values.numpy()
 

@@ -3,6 +3,8 @@ import time
 import numpy as np
 from ml_collections import ConfigDict
 import ray
+from gymnasium.error import ResetNeeded
+
 
 from polaris.policies import Policy, PolicyParams, RandomPolicy
 from polaris.experience.sampling import SampleBatch
@@ -23,6 +25,7 @@ class EnvWorker:
             worker_id: int,
             config: ConfigDict,
     ):
+        self.initialised = False
         import tensorflow as tf
         tf.compat.v1.enable_eager_execution()
 
@@ -57,6 +60,9 @@ class EnvWorker:
         # Init environment
         if self.env is None:
             self.env = PolarisEnv.make(self.config.env, env_index=self.worker_id, **self.config.env_config)
+        if not self.initialised:
+            self.initialised = True
+            time.sleep(self.worker_id*0.1)
 
         agents_to_policies = {
             aid: self.policy_placeholders[policy_params.policy_type + f"_{aid}"].setup(policy_params)
@@ -73,15 +79,18 @@ class EnvWorker:
             ):
                 yield self.worker_id, batches
 
-        except Exception as e:
+        except ResetNeeded as e:
             print("Restarting environment:", e)
             self.env.close()
             time.sleep(2)
             self.env = PolarisEnv.make(self.config.env, env_index=self.worker_id, **self.config.env_config)
             # TODO : recall run_episode_for
 
+
         # Episode finished
         yield self.worker_id, episode.metrics
+
+        del episode
 
 if __name__ == '__main__':
     from polaris.environments.example import DummyEnv

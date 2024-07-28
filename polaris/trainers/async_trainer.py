@@ -16,7 +16,7 @@ from polaris.environments.polaris_env import PolarisEnv
 from polaris.policies.policy import Policy, PolicyParams, ParamsMap
 from polaris.experience.matchmaking import RandomMatchmaking
 from polaris.experience.sampling import ExperienceQueue, SampleBatch
-from polaris.utils.metrics import MetricBank, GlobalCounter, GlobalTimer
+from polaris.utils.metrics import MetricBank, GlobalCounter, GlobalTimer, average_dict
 
 import psutil
 
@@ -144,7 +144,8 @@ class AsyncTrainer(Checkpointable):
                 num_batch +=1
                 owner = self.policy_map[exp_batch.get_owner()]
                 exp_batch[SampleBatch.SEQ_LENS] = np.array(exp_batch[SampleBatch.SEQ_LENS])
-                exp_batch = exp_batch.pad_and_split_to_sequences()
+                if owner.is_recurrent:
+                    exp_batch = exp_batch.pad_and_split_to_sequences()
                 self.experience_queue[owner.name].push([exp_batch])
                 GlobalCounter.incr("batch_count")
                 frames += exp_batch.size()
@@ -188,27 +189,30 @@ class AsyncTrainer(Checkpointable):
 
         # Make it policy specific, thus extract metrics of policies.
 
-
         if len(training_metrics)> 0:
             for policy_name, policy_training_metrics in training_metrics.items():
                 policy_training_metrics = mean_metric_batch([policy_training_metrics])
                 self.metricbank.update(policy_training_metrics, prefix=f"training/{policy_name}/")
         if len(experience_metrics) > 0:
-            policy_experience_metrics = defaultdict(list)
-            pure_episode_metrics = []
-            for episode_metrics in experience_metrics:
-                for policy_name, metrics in episode_metrics.policy_metrics.items():
-                    policy_experience_metrics[policy_name].append(metrics)
+            for metrics in experience_metrics:
+                self.metricbank.update(tree.flatten_with_path(metrics), prefix=f"experience/",
+                                       smoothing=self.config.episode_metrics_smoothing)
 
-                episode_metrics = episode_metrics._asdict()
-                del episode_metrics["policy_metrics"]
-                pure_episode_metrics.append(EpisodeMetrics(**episode_metrics))
-            mean_batched_experience_metrics = mean_metric_batch(pure_episode_metrics)
-            self.metricbank.update(mean_batched_experience_metrics, prefix="experience/",
-                                smoothing=self.config.episode_metrics_smoothing)
-            for policy_name, metrics in policy_experience_metrics.items():
-                metrics = mean_metric_batch(metrics)
-                self.metricbank.update(metrics, prefix=f"experience/{policy_name}/", smoothing=self.config.episode_metrics_smoothing)
+            # policy_experience_metrics = defaultdict(list)
+            # pure_episode_metrics = []
+            # for episode_metrics in experience_metrics:
+            #     for policy_name, metrics in episode_metrics.policy_metrics.items():
+            #         policy_experience_metrics[policy_name].append(metrics)
+            #
+            #     episode_metrics = episode_metrics._asdict()
+            #     del episode_metrics["policy_metrics"]
+            #     pure_episode_metrics.append(EpisodeMetrics(**episode_metrics))
+            # mean_batched_experience_metrics = mean_metric_batch(pure_episode_metrics)
+            # self.metricbank.update(mean_batched_experience_metrics, prefix="experience/",
+            #                     smoothing=self.config.episode_metrics_smoothing)
+            # for policy_name, metrics in policy_experience_metrics.items():
+            #     metrics = mean_metric_batch(metrics)
+            #     self.metricbank.update(metrics, prefix=f"experience/{policy_name}/", smoothing=self.config.episode_metrics_smoothing)
 
         misc_metrics =  [
                     ("RAM", psutil.virtual_memory().percent),

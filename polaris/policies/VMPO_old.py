@@ -278,7 +278,8 @@ class VMPO(ParametrisedPolicy):
                     +tf.reduce_mean(tf.math.square(unnormalised_gvs))
                 )
 
-                advantages = clipped_rhos * (gpi - tf.stop_gradient(vf_preds))
+
+                normalised_pg_advantages = clipped_rhos * (gpi - tf.stop_gradient(vf_preds))
                 #normalised_pg_advantages = self.return_based_scaling.normalise(clipped_rhos * (gpi - tf.stop_gradient(vf_preds)),
                 #                                                               batch_sigma=batch_sigma)
                 #values = self.popart_module.normalise(vtrace_returns.gvs)
@@ -286,30 +287,31 @@ class VMPO(ParametrisedPolicy):
 
                 #advantage =  self.return_based_scaling.normalise(gvs - vf_preds,
                 #                                                 batch_sigma=batch_sigma)
-                critic_loss =  self.policy_config.baseline_weight * tf.reduce_mean(tf.square(gvs - vf_preds))
+                advantage = gvs - vf_preds
+                critic_loss =  self.policy_config.baseline_weight * tf.reduce_mean(tf.square(advantage))
 
+                num_samples = tf.size(normalised_pg_advantages)
+
+                k = tf.cast(self.policy_config.top_sample_frac * tf.cast(num_samples, tf.float32), tf.int32)
+                top_half_normalised_pg_advantages, top_half_indices = tf.math.top_k(normalised_pg_advantages, k=k, sorted=True)
+
+                top_half_clipped_rhos = tf.gather(clipped_rhos, top_half_indices, batch_dims=-1)
                 temperature = tf.exp(self.log_temperature * self.policy_config.temperature_speed)
+                annealed_top_half_exp_advantages = get_annealed_softmax_advantages(
+                    top_half_normalised_pg_advantages,
+                    temperature,
+                    top_half_clipped_rhos,
+                )
 
-                scaled_advantages = advantages / temperature
-                max_scaled_advantage = tf.stop_gradient(tf.reduce_max(scaled_advantages))
+                temperature_kl = tf.math.log(
+                    tf.reduce_mean(tf.exp(tf.minimum(top_half_normalised_pg_advantages / temperature, 10.)) * top_half_clipped_rhos)
+                )
 
-                num_samples = tf.size(advantages)
-                float_k = self.policy_config.top_sample_frac * tf.cast(num_samples, tf.float32)
-                k = tf.cast(float_k, tf.int32)
-                top_k_scaled_advantages, top_half_indices = tf.math.top_k(tf.stop_gradient(scaled_advantages), k=k, sorted=True)
-
-                # Reweight the old trajectories.
-                top_k_clipped_rhos = tf.gather(clipped_rhos, top_half_indices, batch_dims=-1)
-                unnormalized_weights = top_k_clipped_rhos * tf.math.exp(top_k_scaled_advantages - max_scaled_advantage)
-
-                sum_weights = tf.reduce_sum(unnormalized_weights) + 1e-8
-
-                normalized_weights = tf.stop_gradient(unnormalized_weights / sum_weights)
-
-                log_mean_weights = (tf.math.log(sum_weights) + max_scaled_advantage
-                                    - tf.math.log(float_k))
-
-                temperature_loss = temperature * (self.policy_config.temperature_eps - log_mean_weights)
+                temperature_loss = compute_temperature_loss(
+                    temperature=temperature,
+                    temperature_eps=self.policy_config.temperature_eps,
+                    temperature_kl=temperature_kl
+                )
 
                 kl_offline_to_online = tf.boolean_mask(offline_action_dist.kl(action_logits), mask)
 
@@ -318,13 +320,16 @@ class VMPO(ParametrisedPolicy):
                     trust_region_coeff=trust_region_coeff,
                     trust_region_eps=self.policy_config.trust_region_eps,
                     kl_offline_to_online=kl_offline_to_online
-                ) * self.policy_config.trust_region_weight
+                )
 
                 entropy_loss = - self.policy_config.entropy_cost * tf.reduce_mean(entropy)
 
                 top_half_online_action_logp = tf.gather(online_action_logp, top_half_indices, batch_dims=-1)
 
-                policy_loss = -tf.reduce_sum(top_half_online_action_logp * normalized_weights * self.policy_config.policy_weight)
+                policy_loss = self.policy_config.policy_weight * compute_policy_loss(
+                    top_half_online_logp=top_half_online_action_logp,
+                    annealed_top_half_exp_advantage=annealed_top_half_exp_advantages
+                )
 
                 total_loss = critic_loss + policy_loss + entropy_loss + trust_region_loss + temperature_loss
 
@@ -354,7 +359,7 @@ class VMPO(ParametrisedPolicy):
             "pi_loss": policy_loss,
             "temp_loss": temperature_loss,
             "trust_region_loss": trust_region_loss,
-            "max_scaled_advantage": max_scaled_advantage,
+            "max_pg_adventage": tf.reduce_max(normalised_pg_advantages / temperature),
             "temperature": temperature,
             "trust_region_coeff": trust_region_coeff,
             "mean_grad_norm": mean_grad_norm,
@@ -363,6 +368,7 @@ class VMPO(ParametrisedPolicy):
             "vtrace_std": tf.math.reduce_std(unnormalised_gvs),
             "offline_to_online_kl": tf.reduce_mean(kl_offline_to_online),
             "rhos": tf.reduce_mean(rhos),
+            "temperature_kl": temperature_kl,
             "returns": gvs,
             "masked_rewards": rewards,
             "batch_sigma": batch_sigma,

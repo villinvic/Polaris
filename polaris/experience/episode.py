@@ -85,7 +85,7 @@ class Episode:
 
         while not dones["__all__"]:
             for aid, policy in self.agents_to_policies.items():
-                actions[aid], next_states[aid], action_logp[aid], action_logits[aid] = policy.compute_action(
+                actions[aid], next_states[aid], action_logp[aid], action_logits[aid], value = policy.compute_action(
                     {
                         SampleBatch.OBS: observations[aid],
                         SampleBatch.PREV_ACTION: prev_actions[aid],
@@ -93,17 +93,22 @@ class Episode:
                         SampleBatch.STATE: states[aid]
                     }
                 )
+                if self.env.env_index == 0:
+                    softmax =  np.exp(action_logits[aid])
+                    softmax = softmax / np.sum(softmax, keepdims=True)
+                    print(value, "|", actions[aid], "|", action_logits[aid])
 
             try:
                 next_observations, rewards, dones, truncs, infos = self.env.step(actions)
-            except ResetNeeded:
-                for sample_batch in sample_batches.items():
+            except ResetNeeded as e:
+                for aid, sample_batch in sample_batches.items():
                     sample_batch.reset()
-                raise ResetNeeded
+                raise e
 
 
 
             dones["__all__"] = dones["__all__"] or truncs["__all__"]
+
 
             self.callbacks.on_step(
                 self.agents_to_policies,
@@ -119,6 +124,8 @@ class Episode:
             batches = []
             for aid, policy in self.agents_to_policies.items():
                 if not dones[aid] or dones["__all__"]:
+                    # TODO: check on done
+                    done = dones[aid] or dones["__all__"]
                     batches += sample_batches[aid].push(
                         {
                             SampleBatch.OBS: observations[aid],
@@ -129,7 +136,7 @@ class Episode:
                             SampleBatch.ACTION_LOGITS: action_logits[aid],
                             SampleBatch.REWARD: rewards[aid],
                             SampleBatch.PREV_REWARD: prev_rewards[aid],
-                            SampleBatch.DONE: dones[aid],
+                            SampleBatch.DONE: done,
                             SampleBatch.STATE: states[aid],
                             SampleBatch.NEXT_STATE: states[aid],
                             SampleBatch.AGENT_ID: aid,
@@ -137,7 +144,8 @@ class Episode:
                             SampleBatch.VERSION: policy.version,
                             SampleBatch.EPISODE_ID: self.id,
                             SampleBatch.T: t,
-                        }
+                        },
+                        flush=done
                     )
                     episode_lengths[aid] += 1
                     episode_rewards[aid] += rewards[aid]

@@ -24,10 +24,10 @@ class Popart:
         new_std = tf.clip_by_value(tf.sqrt(new_var), self.std_clip, 1e6)
 
         value_out.b.assign(
-            (value_out.b * std + self.mean - new_mean) / new_std
+            (value_out.b * self.std + self.mean - new_mean) / new_std
         )
         value_out.w.assign(
-            value_out.w * std / new_std
+            value_out.w * self.std / new_std
         )
 
         self.mean.assign(new_mean)

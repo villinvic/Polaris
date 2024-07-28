@@ -103,18 +103,22 @@ class SampleBatch(dict):
             assert sum(self[SampleBatch.SEQ_LENS])==self.trajectory_length, f"Seq_lens not summing to {self.trajectory_length}"
             return [self]
         elif flush:
+            assert done, "flushing but not done ?"
             # TODO: on hold
+            # TODO: what happens when seq_lens != traj len
             # we fill the remaining with dones and appropriate seq len
-            remaining = self.index - sum(self[SampleBatch.SEQ_LENS])
-            self[SampleBatch.SEQ_LENS].append(remaining)
+            #remaining = self.index - sum(self[SampleBatch.SEQ_LENS])
+            remaining = self.trajectory_length - self.index
             self[SampleBatch.POLICY_ID][-remaining:] = self[SampleBatch.POLICY_ID][0]
             for k, v in self.items():
                 if k == SampleBatch.POLICY_ID:
                     v[-remaining:] = self[SampleBatch.POLICY_ID][0]
                 elif k == SampleBatch.SEQ_LENS:
                     pass
-                else:
-                    self[k][-remaining:] = 0
+                elif k == SampleBatch.DONE:
+                    v[-remaining:] = True
+                elif k == SampleBatch.REWARD:
+                    v[-remaining] = 0.
 
             self.index = self.trajectory_length
 
@@ -122,7 +126,7 @@ class SampleBatch(dict):
             # self[SampleBatch.SEQ_LENS].append(last_seq_len)
             # truncated = self[:self.index]
             # self.index = self.trajectory_length
-            # return [truncated]
+            return [self]
         return []
         # when full, reset and send batch
 
@@ -151,7 +155,7 @@ class SampleBatch(dict):
         seq_lens = d.pop(SampleBatch.SEQ_LENS)
 
         sliced_batch = SampleBatch(trajectory_length=self.trajectory_length, max_seq_len=self.max_seq_len, **tree.map_structure(lambda x: x[s_seq], d))
-        sliced_batch.trajectory_length = len(sliced_batch[SampleBatch.OBS])
+        sliced_batch.trajectory_length = len(sliced_batch[SampleBatch.REWARD])
         sliced_batch[SampleBatch.SEQ_LENS] = seq_lens[s]
 
         return sliced_batch

@@ -3,6 +3,7 @@ import time
 from collections import defaultdict
 
 import tensorflow as tf
+import tree
 
 from .paths import PathManager
 import numpy as np
@@ -55,6 +56,21 @@ class _GlobalTimer(GlobalVars):
 
 GlobalCounter = _GlobalCounter()
 GlobalTimer = _GlobalTimer()
+
+def merge(args):
+    if any(not isinstance(i, dict) for i in args):
+        return np.array([args[0]]) if len(args) == 1 else np.array(args)
+    d = defaultdict(list)
+    for i in args:
+        for a, b in i.items():
+            d[a].append(b)
+    return {a: merge(b) for a, b in d.items()}
+
+def average_dict(data: list):
+    return tree.map_structure(
+        lambda v: np.mean(v),
+        merge(data)
+    )
 
 
 class Metric:
@@ -175,7 +191,7 @@ class MetricBank:
             if isinstance(metric_name, tuple):
                 metric_name = metric_path_name(metric_path=metric_name)
             if value is not None:
-                p_metric_name =  prefix + metric_name
+                p_metric_name = prefix + metric_name
                 if p_metric_name in self.metrics:
                     self.metrics[p_metric_name].update(value, n_samples=n_samples)
                 else:

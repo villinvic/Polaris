@@ -39,6 +39,7 @@ class IMPALA(ParametrisedPolicy):
 
         num_sequences = len(input_batch[SampleBatch.SEQ_LENS])
 
+        # TODO: make this a function, can we do this more efficiently ?
         def make_time_major(v):
             return np.transpose(np.reshape(v, (num_sequences, -1) + v.shape[1:]), (1, 0) + tuple(range(2, 1+len(v.shape))))
 
@@ -47,11 +48,18 @@ class IMPALA(ParametrisedPolicy):
         seq_lens = d.pop(SampleBatch.SEQ_LENS)
         time_major_batch = tree.map_structure(make_time_major, d)
 
-        time_major_batch[SampleBatch.OBS] = np.concatenate([time_major_batch[SampleBatch.OBS], time_major_batch[SampleBatch.NEXT_OBS][-1:]], axis=0)
+        def add_last_timestep(v1, v2):
+            return np.concatenate([v1, v2[-1:]], axis=0)
+
+
+        time_major_batch[SampleBatch.OBS] = tree.map_structure(
+            add_last_timestep,
+            time_major_batch[SampleBatch.OBS], time_major_batch[SampleBatch.NEXT_OBS]
+        )
+
         time_major_batch[SampleBatch.PREV_REWARD] = np.concatenate([time_major_batch[SampleBatch.PREV_REWARD], time_major_batch[SampleBatch.REWARD][-1:]], axis=0)
         time_major_batch[SampleBatch.PREV_ACTION] = np.concatenate([time_major_batch[SampleBatch.PREV_ACTION], time_major_batch[SampleBatch.ACTION][-1:]], axis=0)
         time_major_batch[SampleBatch.STATE] = [state[0] for state in time_major_batch[SampleBatch.STATE]]
-
         time_major_batch[SampleBatch.SEQ_LENS] = seq_lens
 
         # Sequence is one step longer if we are not done at timestep T
@@ -60,6 +68,7 @@ class IMPALA(ParametrisedPolicy):
                            np.logical_not(time_major_batch[SampleBatch.DONE][-1])
                            )] += 1
 
+
         nn_train_time = time.time()
 
         metrics = self._train(
@@ -67,10 +76,14 @@ class IMPALA(ParametrisedPolicy):
         )
         popart_update_time = time.time()
 
-        self.popart_module.batch_update(metrics["vtrace_mean"], metrics["vtrace_std"], self.model._value_out)
+        #self.return_based_scaling.batch_update(metrics.pop("masked_rewards"), metrics.pop("returns"))
+        #metrics["return_based_scaling"] = self.return_based_scaling.get_metrics()
+
+        self.popart_module.batch_update(metrics["vtrace_mean"], metrics["vtrace_std"], value_out=self.model._value_out)
         metrics["popart"] = self.popart_module.get_metrics()
 
-
+        if self.version % self.policy_config.target_update_freq == 0:
+            self.update_offline_model()
 
         metrics.update(**res,
                        preprocess_time_ms=(nn_train_time-preprocess_start_time)*1000.,
@@ -88,7 +101,7 @@ class IMPALA(ParametrisedPolicy):
         #B, T = tf.shape(input_batch[SampleBatch.OBS])
         with tf.GradientTape() as tape:
             with tf.device('/gpu:0'):
-                action_logits, state = self.model(
+                (action_logits, state), all_vf_preds = self.model(
                     input_batch
                 )
                 mask_all = tf.transpose(tf.sequence_mask(input_batch[SampleBatch.SEQ_LENS], maxlen=self.config.max_seq_len+1), [1, 0])
@@ -100,7 +113,6 @@ class IMPALA(ParametrisedPolicy):
                 behavior_logp = input_batch[SampleBatch.ACTION_LOGP]
                 entropy = tf.boolean_mask(action_dist.entropy(), mask)
                 # TODO: check on VMPO for how we did masking
-                all_vf_preds = self.model.value_function() * tf.cast(mask_all, tf.float32)
                 vf_preds = all_vf_preds[:-1]
                 unnormalised_all_vf_preds = self.popart_module.unnormalise(all_vf_preds)
                 unnormalised_vf_pred = unnormalised_all_vf_preds[:-1]
@@ -119,7 +131,8 @@ class IMPALA(ParametrisedPolicy):
                     next_values=unnormalised_next_vf_pred,
                     discount=self.policy_config.discount,
                     clipped_rhos=clipped_rhos,
-                    bootstrap_v=unnormalised_bootstrap_v
+                    bootstrap_v=unnormalised_bootstrap_v,
+                    mask=mask
                     )
 
 
@@ -128,20 +141,20 @@ class IMPALA(ParametrisedPolicy):
 
                 #values = input_batch[SampleBatch.REWARD] + next_vf_pred * self.policy_config.discount * (1. - input_batch[SampleBatch.DONE])
                 advantage = tf.boolean_mask(values - vf_preds, mask)
-                critic_loss =  0.5 * tf.square(advantage)
-                policy_loss = - (tf.boolean_mask(action_logp, mask) * tf.stop_gradient(normalised_pg_advantages) + self.policy_config.entropy_cost * entropy)
+                critic_loss =  0.5 * tf.reduce_mean(tf.square(advantage))
+                policy_loss = - tf.reduce_mean(tf.boolean_mask(action_logp, mask) * tf.stop_gradient(normalised_pg_advantages))
 
-                total_loss = tf.reduce_mean(policy_loss + critic_loss)
+                mean_entropy = tf.reduce_mean(entropy)
+                entropy_loss = - mean_entropy * self.policy_config.entropy_cost
+
+                total_loss = critic_loss + policy_loss + entropy_loss
 
         gradients = tape.gradient(total_loss, self.model.trainable_variables)
         gradients = [tf.clip_by_norm(g, self.policy_config.grad_clip)
                  for g in gradients]
 
-        self.model.optimiser.apply_gradients(zip(gradients,self.model.trainable_variables))
+        self.model.optimiser.apply(gradients,self.model.trainable_variables)
 
-        mean_entropy = tf.reduce_mean(entropy)
-        vf_loss = tf.reduce_mean(critic_loss)
-        pi_loss = tf.reduce_mean(policy_loss)
         total_grad_norm = 0.
         num_params = 0
         for grad in gradients:
@@ -149,14 +162,14 @@ class IMPALA(ParametrisedPolicy):
             num_params += tf.size(grad)
         mean_grad_norm = total_grad_norm / tf.cast(num_params, tf.float32)
         explained_vf = explained_variance(
-            tf.reshape(tf.boolean_mask(values, mask), [-1]),
-            tf.reshape(tf.boolean_mask(vf_preds, mask), [-1]),
+           values,
+            vf_preds,
         )
 
         return {
             "mean_entropy": mean_entropy,
-            "vf_loss": vf_loss,
-            "pi_loss": pi_loss,
+            "vf_loss": critic_loss,
+            "pi_loss": policy_loss,
             "mean_grad_norm": mean_grad_norm,
             "explained_vf": explained_vf,
             "vtrace_mean": tf.reduce_mean(tf.boolean_mask(vtrace_returns.gvs, mask)),

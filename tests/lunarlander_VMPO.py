@@ -22,55 +22,53 @@ def my_config():
     env = env_obj.env_id
     del env_obj
 
-    num_workers = 6
+    num_workers = 64
     policy_path = 'polaris.policies.VMPO'
     model_path = 'polaris.models.fc_model'
     policy_class = 'VMPO'
     model_class = 'FCModel'
-    trajectory_length = 256
+    trajectory_length = 32
     train_batch_size = 1024
     max_queue_size = train_batch_size * 10
-    max_seq_len = 256
+    max_seq_len = 32
 
     default_policy_config = {
-            'discount'    : 0.99,
-            'gae_lambda'  : 1.0,
-            'entropy_cost': 0.,
+            'discount'    : 0.999, #0.997
+            'entropy_cost': 1e-2,
             'popart_std_clip': 1e-2,
             'popart_lr': 2e-2,
-            'grad_clip': 10.,
+            'grad_clip': 4.,
             'lr'              : 0.0005,
             'rms_prop_rho'    : 0.99,
             'rms_prop_epsilon': 1e-5,
             'fc_dims'         : [128, 128],
 
             # VMPO
-            'temperature_speed'        : 10.,
-            'initial_trust_region_coeff': 1.,
-            'trust_region_eps'          : 0.01,
+            'trust_region_speed': 10.,
+            'initial_trust_region_coeff': 5.,
+            'trust_region_eps'          : 1e-2,
 
+            'temperature_speed': 10.,
             'initial_temperature'       : 1.,
             'temperature_eps'           : 0.1,
 
-            'target_update_freq'        : 15,
-
+            'target_update_freq'        : 1000,
             'top_sample_frac'           : 0.5,
+
+            'baseline_weight'           : 0.5, #np.log(dummy_ssbm.action_space.n)
         }
 
     policy_params = [dict(
         name="VMPO_policy1",
         config=default_policy_config.copy()
     ),
-        dict(
-            name="VMPO_policy2",
-            config=default_policy_config.copy()
-        )
     ]
-    policy_params[1]["config"]["lr"] = 3e-3
 
     tensorboard_logdir = 'lunarlander_VMPO'
-    report_freq = 5
+    report_freq = 50
     episode_metrics_smoothing = 0.9
+
+    env_config = {}
 
     checkpoint_config = dict(
         checkpoint_frequency=100,

@@ -28,10 +28,14 @@ class FCModel(BaseModel):
             config=config,
         )
         self.output_size = action_space.n
-        self.optimiser = RMSprop(
+        # todo: change to snt optim
+        self.optimiser = snt.optimizers.RMSProp(
             learning_rate=config.lr,
-            rho=config.rms_prop_rho,
-            epsilon=config.rms_prop_epsilon
+            decay=config.rms_prop_rho,
+            momentum=0.0,
+            epsilon=config.rms_prop_epsilon,
+            centered=False,
+            name="rmsprop"
         )
 
         self.action_dist = CategoricalDistribution
@@ -77,7 +81,7 @@ class FCModel(BaseModel):
         pi_out = self._pi_out(x)
         self._values = tf.squeeze(self._value_out(x))
 
-        return pi_out, None
+        return (pi_out, None), self._values
 
 
 class FCModelNoBias(BaseModel):

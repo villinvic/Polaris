@@ -79,7 +79,7 @@ class BaseModel(snt.Module):
         batch_input_dict = tree.map_structure(expand_values, input_dict)
         batch_input_dict[SampleBatch.SEQ_LENS] = tf.expand_dims(1, axis=0)
 
-        action_logits, state = self._compute_action_dist(
+        (action_logits, state), value = self._compute_action_dist(
             batch_input_dict
         )
 
@@ -87,7 +87,7 @@ class BaseModel(snt.Module):
         action_dist = self.action_dist(action_logits)
         action = action_dist.sample()
         logp = action_dist.logp(action).numpy()
-        return action.numpy(), state, logp, action_logits
+        return action.numpy(), state, logp, action_logits, value.numpy()
 
 
     @tf.function
