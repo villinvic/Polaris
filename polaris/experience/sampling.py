@@ -269,7 +269,27 @@ class ExperienceQueue:
 
     def size(self):
         return 0 if self.queue is None else self.queue.size()
+    def get_epochs(self, n_epochs):
+        for k in range(n_epochs):
 
+            ordering = np.arange(self.config.train_batch_size // self.config.minibatch_size)
+            np.random.shuffle(ordering)
+            minibatch_indices = np.split(ordering, self.config.minibatch_size//self.queue.max_seq_len)
+            for indices in minibatch_indices:
+
+                yield self.queue.get_from_indices(indices)
+
+def get_epochs(time_major_batch, n_epochs, minibatch_size):
+    max_seq_len, n_trajectories = time_major_batch[SampleBatch.ACTION].shape[:2]
+    for k in range(n_epochs):
+        ordering = np.arange(n_trajectories // self.config.minibatch_size)
+        np.random.shuffle(ordering)
+        minibatch_indices = np.split(ordering, minibatch_size//max_seq_len)
+        for indices in minibatch_indices:
+            yield tree.map_structure(
+                lambda time_major_data: time_major_data[:, indices],
+                time_major_batch
+            )
 
 if __name__ == '__main__':
 
