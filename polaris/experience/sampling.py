@@ -279,18 +279,28 @@ class ExperienceQueue:
 
                 yield self.queue.get_from_indices(indices)
 
+
+
+
 def get_epochs(time_major_batch, n_epochs, minibatch_size):
     max_seq_len, n_trajectories = time_major_batch[SampleBatch.ACTION].shape[:2]
+    seq_lens = np.array(time_major_batch.pop(SampleBatch.SEQ_LENS))
+    minibatches = []
     for k in range(n_epochs):
-        ordering = np.arange(n_trajectories // self.config.minibatch_size)
+        ordering = np.arange(n_trajectories)
         np.random.shuffle(ordering)
         minibatch_indices = np.split(ordering, minibatch_size//max_seq_len)
         for indices in minibatch_indices:
-            yield tree.map_structure(
-                lambda time_major_data: time_major_data[:, indices],
+            def f(p, d):
+                return d[:, indices]
+
+            minibatch =  tree.map_structure_with_path(
+                f,
                 time_major_batch
             )
-
+            minibatch[SampleBatch.SEQ_LENS] = seq_lens[indices]
+            minibatches.append(minibatch)
+    return minibatches
 if __name__ == '__main__':
 
     q = SampleBatch(20, max_seq_len=5)

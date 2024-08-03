@@ -5,7 +5,7 @@
 #from .worker_set import WorkerSet
 #from .matchmaking import MatchMaking, RandomMatchmaking
 
-from .sampling import SampleBatch
+from .sampling import SampleBatch, get_epochs
 # from .environment_worker import EnvWorker
 from .episode import Episode
 from .episode_callbacks import EpisodeCallbacks

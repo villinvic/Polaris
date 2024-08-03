@@ -4,31 +4,76 @@ import tree
 
 from .parametrised import ParametrisedPolicy
 from polaris.experience import SampleBatch, get_epochs
+from polaris.models.utils import EpsilonCategorical
+from polaris.policies import VMPO
 
 import numpy as np
 import tensorflow as tf
+
+from polaris.policies.utils.return_based_scaling import ReturnBasedScaling
+from polaris.policies.utils.popart import Popart
+
 tf.compat.v1.enable_eager_execution()
 
-from polaris.policies.utils.popart import Popart
 from polaris.policies.utils.misc import explained_variance
 from polaris.policies.utils.vtrace import compute_vtrace
-class IMPALA(ParametrisedPolicy):
+
+
+class APPO(ParametrisedPolicy):
+    # TODO: take care of the loss, tophalf adv, not much more i think
 
     def __init__(
             self,
             *args,
+            is_online=False,
             **kwargs
     ):
+        self.is_online = is_online
+        if self.is_online:
+            self.offline_policy = APPO(*args, online=False, **kwargs)
+        else:
+            self.offline_policy = None
+
         super().__init__(
             *args,
             **kwargs
         )
 
+        # self.return_based_scaling = ReturnBasedScaling(
+        #     learning_rate=self.policy_config.popart_lr,
+        #     std_clip=self.policy_config.popart_std_clip
+        # )
         self.popart_module = Popart(
             learning_rate=self.policy_config.popart_lr,
             std_clip=self.policy_config.popart_std_clip
         )
 
+    def init_model(self):
+        super().init_model()
+
+        if self.offline_policy is not None:
+            self.offline_policy.init_model()
+            # set weights to offline policy
+            self.update_offline_model()
+        else:
+            # TODO: add epsilon param, add vmpo config toggle
+            self.model.action_dist = EpsilonCategorical
+
+
+    def get_params(self, online=False):
+        if not online and self.is_online:
+            return self.offline_policy.get_params()
+        else:
+            return super().get_params()
+
+    def update_offline_model(self):
+        self.offline_policy.setup(self.get_params(online=True))
+
+    def setup(self, policy_params: "PolicyParams"):
+        super().setup(policy_params)
+        if self.is_online:
+            self.offline_policy.setup(policy_params)
+        return self
 
     def train(
             self,
@@ -39,6 +84,7 @@ class IMPALA(ParametrisedPolicy):
 
         num_sequences = len(input_batch[SampleBatch.SEQ_LENS])
 
+        # TODO: make this a function, can we do this more efficiently ?
         def make_time_major(v):
             return np.transpose(np.reshape(v, (num_sequences, -1) + v.shape[1:]), (1, 0) + tuple(range(2, 1+len(v.shape))))
 
@@ -47,11 +93,18 @@ class IMPALA(ParametrisedPolicy):
         seq_lens = d.pop(SampleBatch.SEQ_LENS)
         time_major_batch = tree.map_structure(make_time_major, d)
 
-        time_major_batch[SampleBatch.OBS] = np.concatenate([time_major_batch[SampleBatch.OBS], time_major_batch[SampleBatch.NEXT_OBS][-1:]], axis=0)
+        def add_last_timestep(v1, v2):
+            return np.concatenate([v1, v2[-1:]], axis=0)
+
+
+        time_major_batch[SampleBatch.OBS] = tree.map_structure(
+            add_last_timestep,
+            time_major_batch[SampleBatch.OBS], time_major_batch[SampleBatch.NEXT_OBS]
+        )
+
         time_major_batch[SampleBatch.PREV_REWARD] = np.concatenate([time_major_batch[SampleBatch.PREV_REWARD], time_major_batch[SampleBatch.REWARD][-1:]], axis=0)
         time_major_batch[SampleBatch.PREV_ACTION] = np.concatenate([time_major_batch[SampleBatch.PREV_ACTION], time_major_batch[SampleBatch.ACTION][-1:]], axis=0)
-        time_major_batch[SampleBatch.STATE] = [state[0] for state in time_major_batch[SampleBatch.STATE]]
-
+        #time_major_batch[SampleBatch.STATE] = [state[0] for state in time_major_batch[SampleBatch.STATE]]
         time_major_batch[SampleBatch.SEQ_LENS] = seq_lens
 
         # Sequence is one step longer if we are not done at timestep T
@@ -60,23 +113,30 @@ class IMPALA(ParametrisedPolicy):
                            np.logical_not(time_major_batch[SampleBatch.DONE][-1])
                            )] += 1
 
+
         nn_train_time = time.time()
 
-        for epoch_data in get_epochs(
-                time_major_batch=time_major_batch,
-                n_epochs=self.config.n_epochs,
-                minibatch_size=self.config.minibatch_size
-        ):
-            metrics = self._train(
-                input_batch=epoch_data
-            )
-            self.popart_module.batch_update(metrics["vtrace_mean"], metrics["vtrace_std"], self.model._value_out)
+        # TODO: use tf dataset, or see whats happening with the for loop inside the tf function
+        # It is super slow otherwise
+
+        metrics = self._train(
+            input_batch=time_major_batch
+        )
+
+        self.popart_module.batch_update(metrics["vtrace_mean"], metrics["vtrace_std"],
+                                        value_out=self.model._value_out)
+
 
         popart_update_time = time.time()
 
+        #self.return_based_scaling.batch_update(metrics.pop("masked_rewards"), metrics.pop("returns"))
+        #metrics["return_based_scaling"] = self.return_based_scaling.get_metrics()
+
+        self.popart_module.batch_update(metrics["vtrace_mean"], metrics["vtrace_std"], value_out=self.model._value_out)
         metrics["popart"] = self.popart_module.get_metrics()
 
-
+        if self.version % self.policy_config.target_update_freq == 0:
+            self.update_offline_model()
 
         metrics.update(**res,
                        preprocess_time_ms=(nn_train_time-preprocess_start_time)*1000.,
@@ -86,6 +146,9 @@ class IMPALA(ParametrisedPolicy):
 
         return metrics
 
+
+    # TODO: https://github.com/google-deepmind/rlax/blob/master/rlax/_src/mpo_ops.py#L441#L522
+
     @tf.function
     def _train(
             self,
@@ -94,25 +157,35 @@ class IMPALA(ParametrisedPolicy):
         #B, T = tf.shape(input_batch[SampleBatch.OBS])
         with tf.GradientTape() as tape:
             with tf.device('/gpu:0'):
-                action_logits, state = self.model(
+                (action_logits, _), all_vf_preds = self.model(
                     input_batch
                 )
+                (offline_logits, _), _ = self.offline_policy.model(
+                    input_batch
+                )
+
                 mask_all = tf.transpose(tf.sequence_mask(input_batch[SampleBatch.SEQ_LENS], maxlen=self.config.max_seq_len+1), [1, 0])
                 mask = mask_all[:-1]
                 action_logits = action_logits[:-1]
                 action_dist = self.model.action_dist(action_logits)
                 action_logp = action_dist.logp(input_batch[SampleBatch.ACTION])
-                kl = tf.boolean_mask(action_dist.kl(input_batch[SampleBatch.ACTION_LOGITS]), mask)
+
+                offline_action_dist = self.model.action_dist(tf.stop_gradient(offline_logits[:-1]))
+                offline_action_logp = offline_action_dist.logp(input_batch[SampleBatch.ACTION])
+
                 behavior_logp = input_batch[SampleBatch.ACTION_LOGP]
                 entropy = tf.boolean_mask(action_dist.entropy(), mask)
-                # TODO: check on VMPO for how we did masking
-                all_vf_preds = self.model.value_function() * tf.cast(mask_all, tf.float32)
                 vf_preds = all_vf_preds[:-1]
+                next_vf_pred = all_vf_preds[1:]
+                bootstrap_v = all_vf_preds[-1]
+
                 unnormalised_all_vf_preds = self.popart_module.unnormalise(all_vf_preds)
                 unnormalised_vf_pred = unnormalised_all_vf_preds[:-1]
                 unnormalised_next_vf_pred = unnormalised_all_vf_preds[1:]
                 unnormalised_bootstrap_v = unnormalised_all_vf_preds[-1]
-                rhos = tf.exp(action_logp - behavior_logp)
+
+                rhos = tf.exp(offline_action_logp - behavior_logp)
+                # no need to stop the gradient here
                 clipped_rhos= tf.stop_gradient(tf.minimum(1.0, rhos, name='cs'))
 
                 # TODO: See sequence effect on the vtrace !
@@ -121,52 +194,85 @@ class IMPALA(ParametrisedPolicy):
                     vtrace_returns = compute_vtrace(
                     rewards=input_batch[SampleBatch.REWARD],
                     dones=input_batch[SampleBatch.DONE],
-                    values=unnormalised_vf_pred,
+                    values=unnormalised_vf_pred,#vf_preds,
                     next_values=unnormalised_next_vf_pred,
                     discount=self.policy_config.discount,
                     clipped_rhos=clipped_rhos,
-                    bootstrap_v=unnormalised_bootstrap_v
+                    bootstrap_v=unnormalised_bootstrap_v,
+                    mask=mask,
+                    gae_lambda=self.policy_config.gae_lambda,
                     )
 
+                # boolean mask flattens already
+                rewards = tf.boolean_mask(input_batch[SampleBatch.REWARD], mask)
+                unnormalised_gvs = tf.boolean_mask(vtrace_returns.gvs, mask)
+                gvs = self.popart_module.normalise(unnormalised_gvs)
+                unnormalised_gpi = tf.boolean_mask(vtrace_returns.gpi, mask)
+                gpi = self.popart_module.normalise(unnormalised_gpi)
+                clipped_rhos = tf.boolean_mask(clipped_rhos, mask)
+                vf_preds = tf.boolean_mask(vf_preds, mask)
+                online_action_logp = tf.boolean_mask(action_logp, mask)
 
-                normalised_pg_advantages = tf.boolean_mask(clipped_rhos * (self.popart_module.normalise(vtrace_returns.gpi) - vf_preds), mask)
-                values = self.popart_module.normalise(vtrace_returns.gvs)
+                batch_sigma = tf.math.sqrt(
+                    tf.math.square(tf.math.reduce_std(rewards))
+                    +tf.reduce_mean(tf.math.square(unnormalised_gvs))
+                )
 
-                #values = input_batch[SampleBatch.REWARD] + next_vf_pred * self.policy_config.discount * (1. - input_batch[SampleBatch.DONE])
-                advantage = tf.boolean_mask(values - vf_preds, mask)
-                critic_loss =  0.5 * tf.square(advantage)
-                policy_loss = - (tf.boolean_mask(action_logp, mask) * tf.stop_gradient(normalised_pg_advantages) + self.policy_config.entropy_cost * entropy)
+                advantages = clipped_rhos * (gpi - tf.stop_gradient(vf_preds))
 
-                total_loss = tf.reduce_mean(policy_loss + critic_loss)
+                is_ratio = tf.clip_by_value(
+                    tf.math.exp(behavior_logp - offline_action_logp), 0.0, 2.0
+                )
 
-        gradients = tape.gradient(total_loss, self.model.trainable_variables)
-        gradients = [tf.clip_by_norm(g, self.policy_config.grad_clip)
-                 for g in gradients]
+                logp_ratio = tf.boolean_mask(is_ratio * tf.exp(action_logp - behavior_logp), mask)
 
-        self.model.optimiser.apply_gradients(zip(gradients,self.model.trainable_variables))
+                surrogate_loss = tf.minimum(
+                    advantages * logp_ratio,
+                    advantages
+                    * tf.clip_by_value(
+                        logp_ratio,
+                        1 - self.policy_config.ppo_clip,
+                        1 + self.policy_config.ppo_clip,
+                    ),
+                )
+
+                policy_loss = -tf.reduce_mean(surrogate_loss)
+
+                delta = gvs - vf_preds
+                critic_loss = 0.5 * tf.reduce_mean(tf.math.square(delta))
+                mean_entropy = tf.reduce_mean(entropy)
+
+                kl_offline_to_online = tf.boolean_mask(offline_action_dist.kl(action_logits), mask)
+
+                mean_kl = tf.reduce_mean(kl_offline_to_online)
+
+                total_loss = critic_loss + policy_loss - mean_entropy * self.policy_config.entropy_cost + self.policy_config.ppo_kl_coeff * mean_kl
+
+
+
+        vars = self.model.trainable_variables
+        gradients = tape.gradient(total_loss, vars)
+        gradients, _ = tf.clip_by_global_norm(gradients, self.policy_config.grad_clip)
+        mean_grad_norm = tf.linalg.global_norm(gradients)
+
+        self.model.optimiser.apply(gradients, vars)
 
         mean_entropy = tf.reduce_mean(entropy)
-        vf_loss = tf.reduce_mean(critic_loss)
-        pi_loss = tf.reduce_mean(policy_loss)
-        total_grad_norm = 0.
-        num_params = 0
-        for grad in gradients:
-            total_grad_norm += tf.reduce_sum(tf.abs(grad))
-            num_params += tf.size(grad)
-        mean_grad_norm = total_grad_norm / tf.cast(num_params, tf.float32)
         explained_vf = explained_variance(
-            tf.reshape(tf.boolean_mask(values, mask), [-1]),
-            tf.reshape(tf.boolean_mask(vf_preds, mask), [-1]),
+            gvs,
+            vf_preds
         )
 
         return {
             "mean_entropy": mean_entropy,
-            "vf_loss": vf_loss,
-            "pi_loss": pi_loss,
+            "vf_loss": critic_loss,
+            "pi_loss": policy_loss,
             "mean_grad_norm": mean_grad_norm,
             "explained_vf": explained_vf,
-            "vtrace_mean": tf.reduce_mean(tf.boolean_mask(vtrace_returns.gvs, mask)),
-            "vtrace_std": tf.math.reduce_std(tf.boolean_mask(vtrace_returns.gvs, mask)),
-            "kl_divergence": tf.reduce_mean(kl),
-            "rhos": tf.reduce_mean(rhos)
+            "vtrace_mean": tf.reduce_mean(unnormalised_gvs),
+            "vtrace_std": tf.math.reduce_std(unnormalised_gvs),
+            "rhos": tf.reduce_mean(rhos),
+            "masked_rewards": rewards,
+            "batch_sigma": batch_sigma,
+            "offline_to_online_kl": kl_offline_to_online
         }

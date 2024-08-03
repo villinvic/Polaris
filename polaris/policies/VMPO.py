@@ -3,7 +3,7 @@ import time
 import tree
 
 from .parametrised import ParametrisedPolicy
-from polaris.experience import SampleBatch
+from polaris.experience import SampleBatch, get_epochs
 from polaris.models.utils import EpsilonCategorical
 
 import numpy as np
@@ -173,7 +173,7 @@ class VMPO(ParametrisedPolicy):
 
         time_major_batch[SampleBatch.PREV_REWARD] = np.concatenate([time_major_batch[SampleBatch.PREV_REWARD], time_major_batch[SampleBatch.REWARD][-1:]], axis=0)
         time_major_batch[SampleBatch.PREV_ACTION] = np.concatenate([time_major_batch[SampleBatch.PREV_ACTION], time_major_batch[SampleBatch.ACTION][-1:]], axis=0)
-        time_major_batch[SampleBatch.STATE] = [state[0] for state in time_major_batch[SampleBatch.STATE]]
+        #time_major_batch[SampleBatch.STATE] = [state[0] for state in time_major_batch[SampleBatch.STATE]]
         time_major_batch[SampleBatch.SEQ_LENS] = seq_lens
 
         # Sequence is one step longer if we are not done at timestep T
@@ -185,9 +185,13 @@ class VMPO(ParametrisedPolicy):
 
         nn_train_time = time.time()
 
+        # TODO: use tf dataset, or see whats happening with the for loop inside the tf function
+        # It is super slow otherwise
+
         metrics = self._train(
             input_batch=time_major_batch
         )
+
         popart_update_time = time.time()
 
         #self.return_based_scaling.batch_update(metrics.pop("masked_rewards"), metrics.pop("returns"))
@@ -331,18 +335,12 @@ class VMPO(ParametrisedPolicy):
         vars = self.model.trainable_variables + (self.log_temperature, self.trust_region_log_coeff)
         gradients = tape.gradient(total_loss, vars)
         #tf.clip_by_norm(tf.where(tf.math.is_nan(g), tf.zeros_like(g), g)
-        gradients = [tf.clip_by_norm(g, self.policy_config.grad_clip)
-                 for g in gradients]
+        gradients, _ = tf.clip_by_global_norm(gradients, self.policy_config.grad_clip)
+        mean_grad_norm = tf.linalg.global_norm(gradients)
 
         self.model.optimiser.apply(gradients, vars)
 
         mean_entropy = tf.reduce_mean(entropy)
-        total_grad_norm = 0.
-        num_params = 0
-        for grad in gradients:
-            total_grad_norm += tf.reduce_sum(tf.abs(grad))
-            num_params += tf.size(grad)
-        mean_grad_norm = total_grad_norm / tf.cast(num_params, tf.float32)
         explained_vf = explained_variance(
             gvs,
             vf_preds
@@ -363,7 +361,6 @@ class VMPO(ParametrisedPolicy):
             "vtrace_std": tf.math.reduce_std(unnormalised_gvs),
             "offline_to_online_kl": tf.reduce_mean(kl_offline_to_online),
             "rhos": tf.reduce_mean(rhos),
-            "returns": gvs,
             "masked_rewards": rewards,
             "batch_sigma": batch_sigma,
         }

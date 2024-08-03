@@ -14,7 +14,8 @@ def compute_vtrace(
         discount,
         clipped_rhos,
         bootstrap_v,
-        mask
+        mask,
+        gae_lambda=1.,
 
 ) -> VtraceReturns:
     """
@@ -36,9 +37,11 @@ def compute_vtrace(
     discounts = (1.-tf.cast(dones, tf.float32)) * tf.cast(mask, tf.float32) * discount
     deltas = clipped_rhos * (rewards + discounts * next_values - values)
 
+    cs = clipped_rhos * gae_lambda
+
     sequence = (
         discounts,
-        clipped_rhos,
+        cs,
         deltas,
     )
     vs_minus_v_xs = tf.scan(

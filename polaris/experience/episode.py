@@ -84,8 +84,10 @@ class Episode:
         episode_rewards = defaultdict(np.float32)
 
         while not dones["__all__"]:
+            ti = []
             for aid, policy in self.agents_to_policies.items():
-                actions[aid], next_states[aid], action_logp[aid], action_logits[aid], value = policy.compute_action(
+
+                actions[aid], next_states[aid], action_logp[aid], action_logits[aid], value, ti = policy.compute_action(
                     {
                         SampleBatch.OBS: observations[aid],
                         SampleBatch.PREV_ACTION: prev_actions[aid],
@@ -93,11 +95,8 @@ class Episode:
                         SampleBatch.STATE: states[aid]
                     }
                 )
-                if self.env.env_index == 0:
-                    softmax =  np.exp(action_logits[aid])
-                    softmax = softmax / np.sum(softmax, keepdims=True)
-                    print(value, "|", actions[aid], "|", action_logits[aid])
 
+                # TODO: report computation time, step time
             try:
                 next_observations, rewards, dones, truncs, infos = self.env.step(actions)
             except ResetNeeded as e:
@@ -122,56 +121,57 @@ class Episode:
             )
 
             batches = []
-            for aid, policy in self.agents_to_policies.items():
-                if not dones[aid] or dones["__all__"]:
-                    # TODO: check on done
-                    done = dones[aid] or dones["__all__"]
-                    batches += sample_batches[aid].push(
-                        {
-                            SampleBatch.OBS: observations[aid],
-                            SampleBatch.NEXT_OBS: next_observations[aid],
-                            SampleBatch.PREV_ACTION: prev_actions[aid],
-                            SampleBatch.ACTION: actions[aid],
-                            SampleBatch.ACTION_LOGP: action_logp[aid],
-                            SampleBatch.ACTION_LOGITS: action_logits[aid],
-                            SampleBatch.REWARD: rewards[aid],
-                            SampleBatch.PREV_REWARD: prev_rewards[aid],
-                            SampleBatch.DONE: done,
-                            SampleBatch.STATE: states[aid],
-                            SampleBatch.NEXT_STATE: states[aid],
-                            SampleBatch.AGENT_ID: aid,
-                            SampleBatch.POLICY_ID: policy.name,
-                            SampleBatch.VERSION: policy.version,
-                            SampleBatch.EPISODE_ID: self.id,
-                            SampleBatch.T: t,
-                        },
-                        flush=done
-                    )
-                    episode_lengths[aid] += 1
-                    episode_rewards[aid] += rewards[aid]
-                # if dones["__all__"]:
-                #     batches += sample_batches[aid].push(
-                #         {
-                #             SampleBatch.OBS          : observations[aid],
-                #             SampleBatch.NEXT_OBS     : next_observations[aid],
-                #             SampleBatch.PREV_ACTION  : prev_actions[aid],
-                #             SampleBatch.ACTION       : actions[aid],
-                #             SampleBatch.ACTION_LOGP  : action_logp[aid],
-                #             SampleBatch.ACTION_LOGITS: action_logits[aid],
-                #             SampleBatch.REWARD       : rewards[aid],
-                #             SampleBatch.PREV_REWARD  : prev_rewards[aid],
-                #             SampleBatch.DONE         : dones[aid],
-                #             SampleBatch.STATE        : states[aid],
-                #             SampleBatch.NEXT_STATE   : states[aid],
-                #             SampleBatch.AGENT_ID     : aid,
-                #             SampleBatch.POLICY_ID    : policy.name,
-                #             SampleBatch.VERSION      : policy.version,
-                #             SampleBatch.EPISODE_ID   : self.id,
-                #             SampleBatch.T            : t,
-                #         },
-                #     flush=True)
-                #     episode_lengths[aid] += 1
-                #     episode_rewards[aid] += rewards[aid]
+            if self.env.env_index > 0:
+                for aid, policy in self.agents_to_policies.items():
+                    if not dones[aid] or dones["__all__"]:
+                        # TODO: check on done
+                        done = dones[aid] or dones["__all__"]
+                        batches += sample_batches[aid].push(
+                            {
+                                SampleBatch.OBS: observations[aid],
+                                SampleBatch.NEXT_OBS: next_observations[aid],
+                                SampleBatch.PREV_ACTION: prev_actions[aid],
+                                SampleBatch.ACTION: actions[aid],
+                                SampleBatch.ACTION_LOGP: action_logp[aid],
+                                SampleBatch.ACTION_LOGITS: action_logits[aid],
+                                SampleBatch.REWARD: rewards[aid],
+                                SampleBatch.PREV_REWARD: prev_rewards[aid],
+                                SampleBatch.DONE: done,
+                                SampleBatch.STATE: states[aid],
+                                SampleBatch.NEXT_STATE: states[aid],
+                                SampleBatch.AGENT_ID: aid,
+                                SampleBatch.POLICY_ID: policy.name,
+                                SampleBatch.VERSION: policy.version,
+                                SampleBatch.EPISODE_ID: self.id,
+                                SampleBatch.T: t,
+                            },
+                            flush=done
+                        )
+                        episode_lengths[aid] += 1
+                        episode_rewards[aid] += rewards[aid]
+                    # if dones["__all__"]:
+                    #     batches += sample_batches[aid].push(
+                    #         {
+                    #             SampleBatch.OBS          : observations[aid],
+                    #             SampleBatch.NEXT_OBS     : next_observations[aid],
+                    #             SampleBatch.PREV_ACTION  : prev_actions[aid],
+                    #             SampleBatch.ACTION       : actions[aid],
+                    #             SampleBatch.ACTION_LOGP  : action_logp[aid],
+                    #             SampleBatch.ACTION_LOGITS: action_logits[aid],
+                    #             SampleBatch.REWARD       : rewards[aid],
+                    #             SampleBatch.PREV_REWARD  : prev_rewards[aid],
+                    #             SampleBatch.DONE         : dones[aid],
+                    #             SampleBatch.STATE        : states[aid],
+                    #             SampleBatch.NEXT_STATE   : states[aid],
+                    #             SampleBatch.AGENT_ID     : aid,
+                    #             SampleBatch.POLICY_ID    : policy.name,
+                    #             SampleBatch.VERSION      : policy.version,
+                    #             SampleBatch.EPISODE_ID   : self.id,
+                    #             SampleBatch.T            : t,
+                    #         },
+                    #     flush=True)
+                    #     episode_lengths[aid] += 1
+                    #     episode_rewards[aid] += rewards[aid]
 
             if len(batches) > 0:
                 self.callbacks.on_trajectory_end(

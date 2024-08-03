@@ -85,10 +85,13 @@ class Checkpointable:
         self.prev_checkpoints.append(new_path)
         if len(self.prev_checkpoints) > self.keep:
             to_remove = self.prev_checkpoints.pop(0)
-            for full_path, _, files in os.walk(to_remove):
-                for file in files:
-                    os.remove(os.path.join(full_path, file))
-            delete_empty_dirs(to_remove)
+            try:
+                for full_path, _, files in os.walk(to_remove):
+                    for file in files:
+                        os.remove(os.path.join(full_path, file))
+                delete_empty_dirs(to_remove)
+            except Exception as e:
+                print(f"Tried to remove ckpt {e}. Got error:", e)
         os.makedirs(new_path, exist_ok=True)
 
     def save(self):
@@ -113,6 +116,8 @@ class Checkpointable:
         last_checkpoint = self.prev_checkpoints[-1]
 
         restored_components = unpickle_from_dir(last_checkpoint)
+
+        print(last_checkpoint, restored_components)
         loaded_keys = set(restored_components.keys())
         component_keys = set(self.components.keys())
 

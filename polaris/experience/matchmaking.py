@@ -36,7 +36,7 @@ class RandomMatchmaking(MatchMaking):
     ) -> Dict[str, "PolicyParams"]:
 
         return {
-            aid: list(params_map.values())[np.random.choice(len(params_map))] for aid in self.agent_ids
+            aid: list(params_map.values())[np.random.choice(len(params_map), replace=len(params_map)<len(self.agent_ids))] for aid in self.agent_ids
         }
 
 

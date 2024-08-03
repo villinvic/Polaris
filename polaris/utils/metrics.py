@@ -27,6 +27,7 @@ class GlobalVars:
 class _GlobalCounter(GlobalVars):
     STEP = "step"
     ENV_STEPS = "environment_steps"
+    NUM_EPISODES = "num_episodes"
 
     def __init__(self):
         super().__init__(int)

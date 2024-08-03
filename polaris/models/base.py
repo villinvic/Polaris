@@ -4,8 +4,10 @@ from gymnasium.spaces import Space, Dict, Box, Discrete
 from ml_collections import ConfigDict
 import tensorflow as tf
 from tensorflow.keras.optimizers import Optimizer
+import time
 
 from polaris.experience import SampleBatch
+
 
 
 def expand_values(v):
@@ -59,6 +61,7 @@ class BaseModel(snt.Module):
         """
         raise NotImplementedError
 
+
     def value_function(self):
         """
 
@@ -76,18 +79,36 @@ class BaseModel(snt.Module):
             input_dict: SampleBatch
     ):
 
-        batch_input_dict = tree.map_structure(expand_values, input_dict)
-        batch_input_dict[SampleBatch.SEQ_LENS] = tf.expand_dims(1, axis=0)
+        tx = []
+        t = time.time()
+        #batch_input_dict = tree.map_structure(expand_values, input_dict)
+        input_dict[SampleBatch.SEQ_LENS] = tf.expand_dims(1, axis=0)
+        input_dict["single_obs"] = True
+
+        tx.append(t - time.time())
+        t = time.time()
 
         (action_logits, state), value = self._compute_action_dist(
-            batch_input_dict
+            input_dict
         )
+
+        tx.append(t - time.time())
+        t = time.time()
 
         action_logits = tf.squeeze(action_logits).numpy()
         action_dist = self.action_dist(action_logits)
         action = action_dist.sample()
         logp = action_dist.logp(action).numpy()
-        return action.numpy(), state, logp, action_logits, value.numpy()
+
+        tx.append(t - time.time())
+        t = time.time()
+
+        out = action.numpy(), state, logp, action_logits, value.numpy()
+
+        tx.append(t - time.time())
+        t = time.time()
+
+        return out + (tx,)
 
 
     @tf.function

@@ -200,21 +200,6 @@ class AsyncTrainer(Checkpointable):
                 self.metricbank.update(tree.flatten_with_path(metrics), prefix=f"experience/",
                                        smoothing=self.config.episode_metrics_smoothing)
 
-            # policy_experience_metrics = defaultdict(list)
-            # pure_episode_metrics = []
-            # for episode_metrics in experience_metrics:
-            #     for policy_name, metrics in episode_metrics.policy_metrics.items():
-            #         policy_experience_metrics[policy_name].append(metrics)
-            #
-            #     episode_metrics = episode_metrics._asdict()
-            #     del episode_metrics["policy_metrics"]
-            #     pure_episode_metrics.append(EpisodeMetrics(**episode_metrics))
-            # mean_batched_experience_metrics = mean_metric_batch(pure_episode_metrics)
-            # self.metricbank.update(mean_batched_experience_metrics, prefix="experience/",
-            #                     smoothing=self.config.episode_metrics_smoothing)
-            # for policy_name, metrics in policy_experience_metrics.items():
-            #     metrics = mean_metric_batch(metrics)
-            #     self.metricbank.update(metrics, prefix=f"experience/{policy_name}/", smoothing=self.config.episode_metrics_smoothing)
 
         misc_metrics =  [
                     ("RAM", psutil.virtual_memory().percent),
