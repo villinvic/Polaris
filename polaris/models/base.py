@@ -103,10 +103,11 @@ class BaseModel(snt.Module):
         tx.append(t - time.time())
         t = time.time()
 
-        out = action.numpy(), state, logp, action_logits, value.numpy()
+        out = action.numpy(), [s.numpy() for s in state], logp, action_logits, value.numpy()
 
         tx.append(t - time.time())
         t = time.time()
+
 
         return out + (tx,)
 

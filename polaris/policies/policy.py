@@ -20,6 +20,7 @@ class Policy(ABC):
             config: ConfigDict,
             options: ConfigDict,
             policy_config: ConfigDict,
+            stats = None,
             **kwargs,
     ):
         self.name = name
@@ -27,6 +28,7 @@ class Policy(ABC):
         self.observation_space = observation_space
         self.version = 1
         self.options = options
+        self.stats = {} if stats is None else stats
         self.config = config
         self.policy_config = policy_config
         self.model_class = getattr(importlib.import_module(self.config.model_path), self.config.model_class)
@@ -64,6 +66,7 @@ class Policy(ABC):
         self.policy_config.update(**policy_params.config)
         self.version = policy_params.version
         self.options = policy_params.options
+        self.stats = policy_params.stats
         return self
 
     @abstractmethod
@@ -83,6 +86,7 @@ class Policy(ABC):
             config=self.policy_config,
             options=self.options,
             version=self.version,
+            stats=self.stats,
             policy_type=self.policy_type
         )
 
@@ -112,6 +116,7 @@ class PolicyParams(NamedTuple):
     weights: dict = {}
     config: ConfigDict = ConfigDict()
     options: ConfigDict = ConfigDict()
+    stats: dict = {}
     version: int = 0
     policy_type: str = "parametrised"
 

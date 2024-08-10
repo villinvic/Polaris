@@ -1,4 +1,5 @@
 import time
+import copy
 from collections import defaultdict
 from typing import Iterator, List, NamedTuple, Dict
 
@@ -70,7 +71,7 @@ class Episode:
         action_logits = {}
 
         prev_actions = {aid: 0 for aid in self.agents_to_policies}
-        prev_rewards = {aid: 0 for aid in self.agents_to_policies}
+        prev_rewards = {aid: 0. for aid in self.agents_to_policies}
         dones = {
             aid: False for aid in self.agents_to_policies
         }
@@ -121,57 +122,79 @@ class Episode:
             )
 
             batches = []
-            if self.env.env_index > 0:
-                for aid, policy in self.agents_to_policies.items():
-                    if not dones[aid] or dones["__all__"]:
-                        # TODO: check on done
-                        done = dones[aid] or dones["__all__"]
-                        batches += sample_batches[aid].push(
-                            {
-                                SampleBatch.OBS: observations[aid],
-                                SampleBatch.NEXT_OBS: next_observations[aid],
-                                SampleBatch.PREV_ACTION: prev_actions[aid],
-                                SampleBatch.ACTION: actions[aid],
-                                SampleBatch.ACTION_LOGP: action_logp[aid],
-                                SampleBatch.ACTION_LOGITS: action_logits[aid],
-                                SampleBatch.REWARD: rewards[aid],
-                                SampleBatch.PREV_REWARD: prev_rewards[aid],
-                                SampleBatch.DONE: done,
-                                SampleBatch.STATE: states[aid],
-                                SampleBatch.NEXT_STATE: states[aid],
-                                SampleBatch.AGENT_ID: aid,
-                                SampleBatch.POLICY_ID: policy.name,
-                                SampleBatch.VERSION: policy.version,
-                                SampleBatch.EPISODE_ID: self.id,
-                                SampleBatch.T: t,
-                            },
-                            flush=done
-                        )
-                        episode_lengths[aid] += 1
-                        episode_rewards[aid] += rewards[aid]
-                    # if dones["__all__"]:
-                    #     batches += sample_batches[aid].push(
-                    #         {
-                    #             SampleBatch.OBS          : observations[aid],
-                    #             SampleBatch.NEXT_OBS     : next_observations[aid],
-                    #             SampleBatch.PREV_ACTION  : prev_actions[aid],
-                    #             SampleBatch.ACTION       : actions[aid],
-                    #             SampleBatch.ACTION_LOGP  : action_logp[aid],
-                    #             SampleBatch.ACTION_LOGITS: action_logits[aid],
-                    #             SampleBatch.REWARD       : rewards[aid],
-                    #             SampleBatch.PREV_REWARD  : prev_rewards[aid],
-                    #             SampleBatch.DONE         : dones[aid],
-                    #             SampleBatch.STATE        : states[aid],
-                    #             SampleBatch.NEXT_STATE   : states[aid],
-                    #             SampleBatch.AGENT_ID     : aid,
-                    #             SampleBatch.POLICY_ID    : policy.name,
-                    #             SampleBatch.VERSION      : policy.version,
-                    #             SampleBatch.EPISODE_ID   : self.id,
-                    #             SampleBatch.T            : t,
-                    #         },
-                    #     flush=True)
-                    #     episode_lengths[aid] += 1
-                    #     episode_rewards[aid] += rewards[aid]
+
+            for aid, policy in self.agents_to_policies.items():
+                if not dones[aid] or dones["__all__"]:
+                    # TODO: check on done
+                    done = dones[aid] or dones["__all__"]
+                    batches += sample_batches[aid].push(
+                        {
+                            SampleBatch.OBS: observations[aid],
+                            SampleBatch.NEXT_OBS: next_observations[aid],
+                            SampleBatch.PREV_ACTION: prev_actions[aid],
+                            SampleBatch.ACTION: actions[aid],
+                            SampleBatch.ACTION_LOGP: action_logp[aid],
+                            SampleBatch.ACTION_LOGITS: action_logits[aid],
+                            SampleBatch.REWARD: rewards[aid],
+                            SampleBatch.PREV_REWARD: prev_rewards[aid],
+                            SampleBatch.DONE: done,
+                            SampleBatch.STATE: states[aid],
+                            SampleBatch.NEXT_STATE: next_states[aid],
+                            SampleBatch.AGENT_ID: aid,
+                            SampleBatch.POLICY_ID: policy.name,
+                            SampleBatch.VERSION: policy.version,
+                            SampleBatch.EPISODE_ID: self.id,
+                            SampleBatch.T: t,
+                        },
+                        flush=done
+                    )
+                    # for b in batches:
+                    #     print()
+                    #     print(SampleBatch.OBS, list(b[SampleBatch.OBS]["continuous"]["action_frame1"]))
+                    #     print(SampleBatch.OBS, list(b[SampleBatch.OBS]["categorical"]["action1"]))
+                    #     print(SampleBatch.OBS, list(b[SampleBatch.OBS]["categorical"]["action2"]))
+                    #     print(SampleBatch.NEXT_OBS, list(b[SampleBatch.NEXT_OBS]["continuous"]["action_frame1"]))
+                    #     print(SampleBatch.NEXT_OBS, list(b[SampleBatch.OBS]["categorical"]["action1"]))
+                    #     print(SampleBatch.NEXT_OBS, list(b[SampleBatch.OBS]["categorical"]["action2"]))
+                        # for k, v in b.items():
+                        #     if k not in [SampleBatch.ACTION_LOGITS]:
+                        #         if isinstance(v, dict):
+                        #             for kk,vv in v.items():
+                        #                 for kkk, vvv in vv.items():
+                        #                     print(kk, kkk, list(vvv))
+                        #         else: print(k, list(v))
+
+                    episode_lengths[aid] += 1
+                    episode_rewards[aid] += rewards[aid]
+
+                    observations[aid] = next_observations[aid]
+                    prev_rewards[aid] = rewards[aid]
+                    prev_actions[aid] = actions[aid]
+                    states[aid] = copy.deepcopy(next_states[aid])
+
+                # if dones["__all__"]:
+                #     batches += sample_batches[aid].push(
+                #         {
+                #             SampleBatch.OBS          : observations[aid],
+                #             SampleBatch.NEXT_OBS     : next_observations[aid],
+                #             SampleBatch.PREV_ACTION  : prev_actions[aid],
+                #             SampleBatch.ACTION       : actions[aid],
+                #             SampleBatch.ACTION_LOGP  : action_logp[aid],
+                #             SampleBatch.ACTION_LOGITS: action_logits[aid],
+                #             SampleBatch.REWARD       : rewards[aid],
+                #             SampleBatch.PREV_REWARD  : prev_rewards[aid],
+                #             SampleBatch.DONE         : dones[aid],
+                #             SampleBatch.STATE        : states[aid],
+                #             SampleBatch.NEXT_STATE   : states[aid],
+                #             SampleBatch.AGENT_ID     : aid,
+                #             SampleBatch.POLICY_ID    : policy.name,
+                #             SampleBatch.VERSION      : policy.version,
+                #             SampleBatch.EPISODE_ID   : self.id,
+                #             SampleBatch.T            : t,
+                #         },
+                #     flush=True)
+                #     episode_lengths[aid] += 1
+                #     episode_rewards[aid] += rewards[aid]
 
             if len(batches) > 0:
                 self.callbacks.on_trajectory_end(
@@ -180,9 +203,6 @@ class Episode:
                     self.custom_metrics
                 )
                 yield batches
-            observations = next_observations
-            prev_rewards = rewards
-            prev_actions = actions
             t += 1
 
         self.callbacks.on_episode_end(

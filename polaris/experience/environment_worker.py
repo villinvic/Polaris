@@ -3,6 +3,7 @@ import time
 import numpy as np
 from ml_collections import ConfigDict
 import ray
+import copy
 from gymnasium.error import ResetNeeded
 
 
@@ -44,7 +45,8 @@ class EnvWorker:
                 observation_space=self.env.observation_space,
                 config=self.config,
                 options={},
-                policy_config=self.config.default_policy_config
+                stats={},
+                policy_config=copy.deepcopy(self.config.default_policy_config)
             )
             for aid in self.env.get_agent_ids()
         }

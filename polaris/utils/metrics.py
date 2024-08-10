@@ -42,7 +42,7 @@ class _GlobalTimer(GlobalVars):
 
     def __init__(self):
         super().__init__(float)
-        self._dt = defaultdict(float)
+        self._dt = defaultdict(lambda : 1e9)
         self.startup_time = time.time()
 
     def __setitem__(self, key, value):

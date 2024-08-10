@@ -113,12 +113,12 @@ class SampleBatch(dict):
             for k, v in self.items():
                 if k == SampleBatch.POLICY_ID:
                     v[-remaining:] = self[SampleBatch.POLICY_ID][0]
-                elif k == SampleBatch.SEQ_LENS:
-                    pass
                 elif k == SampleBatch.DONE:
                     v[-remaining:] = True
                 elif k == SampleBatch.REWARD:
-                    v[-remaining] = 0.
+                    v[-remaining:] = 0.
+                elif k == SampleBatch.PREV_REWARD:
+                    v[-remaining:] = 0.
 
             self.index = self.trajectory_length
 

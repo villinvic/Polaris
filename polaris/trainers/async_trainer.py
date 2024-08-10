@@ -144,8 +144,8 @@ class AsyncTrainer(Checkpointable):
                 num_batch +=1
                 owner = self.policy_map[exp_batch.get_owner()]
                 exp_batch[SampleBatch.SEQ_LENS] = np.array(exp_batch[SampleBatch.SEQ_LENS])
-                if owner.is_recurrent:
-                    exp_batch = exp_batch.pad_and_split_to_sequences()
+                #if owner.is_recurrent:
+                #    exp_batch = exp_batch.pad_and_split_to_sequences()
                 self.experience_queue[owner.name].push([exp_batch])
                 GlobalCounter.incr("batch_count")
                 frames += exp_batch.size()
@@ -233,6 +233,13 @@ class AsyncTrainer(Checkpointable):
             misc_metrics
             , prefix="misc/", smoothing=0.9
         )
+
+        self.metricbank.update(
+            self.matchmaking.metrics(),
+            prefix="matchmaking", smoothing=0.9
+        )
+
+
 
         # We should call those only at the report freq...
         self.metricbank.update(

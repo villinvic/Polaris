@@ -1,5 +1,5 @@
 import time
-
+from functools import partial
 import tree
 
 from .parametrised import ParametrisedPolicy
@@ -57,7 +57,7 @@ class APPO(ParametrisedPolicy):
             self.update_offline_model()
         else:
             # TODO: add epsilon param, add vmpo config toggle
-            self.model.action_dist = EpsilonCategorical
+            self.model.action_dist = partial(EpsilonCategorical, epsilon=self.policy_config.random_action_chance)
 
 
     def get_params(self, online=False):
@@ -104,8 +104,8 @@ class APPO(ParametrisedPolicy):
 
         time_major_batch[SampleBatch.PREV_REWARD] = np.concatenate([time_major_batch[SampleBatch.PREV_REWARD], time_major_batch[SampleBatch.REWARD][-1:]], axis=0)
         time_major_batch[SampleBatch.PREV_ACTION] = np.concatenate([time_major_batch[SampleBatch.PREV_ACTION], time_major_batch[SampleBatch.ACTION][-1:]], axis=0)
-        #time_major_batch[SampleBatch.STATE] = [state[0] for state in time_major_batch[SampleBatch.STATE]]
         time_major_batch[SampleBatch.SEQ_LENS] = seq_lens
+        time_major_batch[SampleBatch.STATE] = [s[0] for s in time_major_batch[SampleBatch.STATE]]
 
         # Sequence is one step longer if we are not done at timestep T
         time_major_batch[SampleBatch.SEQ_LENS][
@@ -119,13 +119,11 @@ class APPO(ParametrisedPolicy):
         # TODO: use tf dataset, or see whats happening with the for loop inside the tf function
         # It is super slow otherwise
 
+
+
         metrics = self._train(
             input_batch=time_major_batch
         )
-
-        self.popart_module.batch_update(metrics["vtrace_mean"], metrics["vtrace_std"],
-                                        value_out=self.model._value_out)
-
 
         popart_update_time = time.time()
 
@@ -252,8 +250,7 @@ class APPO(ParametrisedPolicy):
 
         vars = self.model.trainable_variables
         gradients = tape.gradient(total_loss, vars)
-        gradients, _ = tf.clip_by_global_norm(gradients, self.policy_config.grad_clip)
-        mean_grad_norm = tf.linalg.global_norm(gradients)
+        gradients, mean_grad_norm = tf.clip_by_global_norm(gradients, self.policy_config.grad_clip)
 
         self.model.optimiser.apply(gradients, vars)
 

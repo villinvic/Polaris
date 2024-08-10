@@ -35,9 +35,13 @@ class RandomMatchmaking(MatchMaking):
             **kwargs,
     ) -> Dict[str, "PolicyParams"]:
 
-        return {
-            aid: list(params_map.values())[np.random.choice(len(params_map), replace=len(params_map)<len(self.agent_ids))] for aid in self.agent_ids
+        sampled_policies = np.random.choice(len(params_map), size=len(self.agent_ids), replace=len(params_map)<len(self.agent_ids))
+
+        param_values = list(params_map.values())
+        r = {
+            aid: param_values[pid] for pid, aid in zip(sampled_policies, self.agent_ids)
         }
+        return r
 
 
 class Spectator(MatchMaking):
@@ -57,7 +61,7 @@ class TwoPlayerEloRanking(MatchMaking):
             win_rate_lr=2e-2,
     ):
         
-        super().__init__(agent_ids=agent_ids, policy_params=policy_params)
+        super().__init__(agent_ids=agent_ids)
 
         self.initial_elo = initial_elo
         self.initial_lr = initial_lr
