@@ -86,8 +86,8 @@ class Episode:
 
         while not dones["__all__"]:
             ti = []
+            input("[Enter]")
             for aid, policy in self.agents_to_policies.items():
-
                 actions[aid], next_states[aid], action_logp[aid], action_logits[aid], value, ti = policy.compute_action(
                     {
                         SampleBatch.OBS: observations[aid],
@@ -167,7 +167,7 @@ class Episode:
                     episode_lengths[aid] += 1
                     episode_rewards[aid] += rewards[aid]
 
-                    observations[aid] = next_observations[aid]
+                    observations[aid] = copy.deepcopy(next_observations[aid])
                     prev_rewards[aid] = rewards[aid]
                     prev_actions[aid] = actions[aid]
                     states[aid] = copy.deepcopy(next_states[aid])
@@ -202,6 +202,42 @@ class Episode:
                     batches,
                     self.custom_metrics
                 )
+                # if len(batches) == 2:
+                #     b1, b2 = batches
+                #     assert b1[SampleBatch.AGENT_ID][0] == 1 and b2[SampleBatch.AGENT_ID][0] == 2
+                #     if not np.any(b1[SampleBatch.DONE]):
+                #
+                #
+                #         print("batch p1", b1[SampleBatch.OBS]["continuous"])
+                #         print("next batch p1", b1[SampleBatch.NEXT_OBS]["continuous"])
+                #
+                #         print()
+                #         print("batch p2", b2[SampleBatch.OBS]["continuous"])
+                #         print("next batch p2", b2[SampleBatch.NEXT_OBS]["continuous"])
+                #         print("\n")
+
+                        # print("1, self_x", list(b1["continuous"]["position1"][:, 0]))
+                        # print("1, opp_x", list(b1["continuous"]["position2"][:, 0]))
+                        # print("2, self_x", list(b2["continuous"]["position1"][:, 0]))
+                        # print("2, opp_x", list(b2["continuous"]["position2"][:, 0]))
+
+                        # for k in ["continuous", "binary", "categorical"]:
+                        #     for kk in b1[k]:
+                        #         if "1" in kk:
+                        #             kk_base = kk[:-1]
+                        #             if not np.allclose(b1[k][kk][:-4], b2[k][kk_base+"2"][4:]):
+                        #                 print(kk_base+"1", b1[k][kk], b2[k][kk_base+"2"])
+                        #             if not np.allclose(b2[k][kk][:-4], b1[k][kk_base+"2"][4:]):
+                        #                 print(kk_base+"2", b2[k][kk], b1[k][kk_base + "2"])
+
+
+                # for i, b in enumerate(batches):
+                #     print(i, b[SampleBatch.AGENT_ID][0])
+                #     print(b[SampleBatch.AGENT_ID][0], "time", list(b[SampleBatch.T]))
+                #     print(b[SampleBatch.AGENT_ID][0], "action_frame1", list(b[SampleBatch.OBS]["continuous"]["action_frame1"][:, 0]))
+                #     print(b[SampleBatch.AGENT_ID][0], "action_frame2", list(b[SampleBatch.OBS]["continuous"]["action_frame2"][:, 0]))
+
+
                 yield batches
             t += 1
 
