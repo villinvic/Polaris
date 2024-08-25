@@ -85,34 +85,31 @@ class BaseModel(snt.Module):
         input_dict[SampleBatch.SEQ_LENS] = tf.expand_dims(1, axis=0)
         input_dict["single_obs"] = True
 
-        tx.append(t - time.time())
+        tx.append(time.time() - t)
         t = time.time()
 
-        (action_logits, state), value = self._compute_action_dist(
+
+        (action_logits, state), value, action, logp = self._compute_action_dist(
             input_dict
         )
 
-        tx.append(t - time.time())
+        tx.append(time.time() - t)
         t = time.time()
 
-        action_logits = tf.squeeze(action_logits).numpy()
-        action_dist = self.action_dist(action_logits)
-        action = action_dist.sample()
-        logp = action_dist.logp(action).numpy()
+        out = (action.numpy(), tree.map_structure(lambda v: v.numpy(), state), logp.numpy(),
+               action_logits.numpy(), value.numpy())
 
-        tx.append(t - time.time())
-        t = time.time()
-
-        out = action.numpy(), [s.numpy() for s in state], logp, action_logits, value.numpy()
-
-        tx.append(t - time.time())
-        t = time.time()
-
+        tx.append(time.time() - t)
 
         return out + (tx,)
 
 
     @tf.function
     def _compute_action_dist(self, input_dict):
-        return self(input_dict)
+        (action_logits, state), value = self(input_dict)
+        action_logits = tf.squeeze(action_logits)
+        action_dist = self.action_dist(action_logits)
+        action = action_dist.sample()
+        logp = action_dist.logp(action)
+        return (action_logits, state), value, action, logp
 

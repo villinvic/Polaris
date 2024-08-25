@@ -16,6 +16,7 @@ def pickle_paths(obj, path: str):
         os.makedirs(parent_path, exist_ok=True)
         with open(path + ".pkl", "wb") as f:
             pickle.dump(obj, f)
+            print("saved", path)
 
 def unpickle_from_dir(path):
     """
@@ -95,6 +96,7 @@ class Checkpointable:
         os.makedirs(new_path, exist_ok=True)
 
     def save(self):
+        print(self.components)
         curr_path = os.path.join(self.checkpoint_path, "checkpoint_" + str(GlobalCounter[GlobalCounter.STEP]))
         self.roll_checkpoints(curr_path)
         pickle_paths(self.components, curr_path)
@@ -125,6 +127,11 @@ class Checkpointable:
             print(f"Loaded a checkpoint with different components: had {component_keys}, loaded {loaded_keys}")
 
         self.__dict__.update(restored_components)
+
+        self.components = {
+            k: getattr(self, k)
+            for k in self.components
+        }
 
         GlobalCounter[GlobalCounter.STEP] = get_ckpt_num(last_checkpoint)
 

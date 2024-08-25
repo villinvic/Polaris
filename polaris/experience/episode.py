@@ -85,8 +85,6 @@ class Episode:
         episode_rewards = defaultdict(np.float32)
 
         while not dones["__all__"]:
-            ti = []
-            input("[Enter]")
             for aid, policy in self.agents_to_policies.items():
                 actions[aid], next_states[aid], action_logp[aid], action_logits[aid], value, ti = policy.compute_action(
                     {
@@ -104,8 +102,6 @@ class Episode:
                 for aid, sample_batch in sample_batches.items():
                     sample_batch.reset()
                 raise e
-
-
 
             dones["__all__"] = dones["__all__"] or truncs["__all__"]
 
@@ -139,7 +135,7 @@ class Episode:
                             SampleBatch.PREV_REWARD: prev_rewards[aid],
                             SampleBatch.DONE: done,
                             SampleBatch.STATE: states[aid],
-                            SampleBatch.NEXT_STATE: next_states[aid],
+                            #SampleBatch.NEXT_STATE: next_states[aid],
                             SampleBatch.AGENT_ID: aid,
                             SampleBatch.POLICY_ID: policy.name,
                             SampleBatch.VERSION: policy.version,
@@ -206,6 +202,11 @@ class Episode:
                 #     b1, b2 = batches
                 #     assert b1[SampleBatch.AGENT_ID][0] == 1 and b2[SampleBatch.AGENT_ID][0] == 2
                 #     if not np.any(b1[SampleBatch.DONE]):
+                #         print(pos)
+                #         print(1, b1[SampleBatch.OBS]["continuous"]["position1"][:, 0], b1[SampleBatch.OBS]["continuous"]["position2"][:, 0])
+                #         print(2, b2[SampleBatch.OBS]["continuous"]["position1"][:, 0], b2[SampleBatch.OBS]["continuous"]["position2"][:, 0])
+                #
+                #         pos = defaultdict(list)
                 #
                 #
                 #         print("batch p1", b1[SampleBatch.OBS]["continuous"])

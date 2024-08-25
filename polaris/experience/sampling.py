@@ -1,3 +1,4 @@
+import copy
 from typing import List
 import numpy as np
 from ml_collections import ConfigDict
@@ -82,10 +83,14 @@ class SampleBatch(dict):
             if key not in self:
                 self.init_key(key, value)
 
-            tree.map_structure(
-                self.set_item,
-                super().__getitem__(key), value
-            )
+            if key == self.STATE:
+                if self.index == 0:
+                    self[SampleBatch.STATE] = copy.deepcopy(value)
+            else:
+                tree.map_structure(
+                    self.set_item,
+                    super().__getitem__(key), value
+                )
 
         done = data.get(SampleBatch.DONE, False)
         self.advance()
@@ -153,10 +158,13 @@ class SampleBatch(dict):
 
         d = dict(self)
         seq_lens = d.pop(SampleBatch.SEQ_LENS)
+        state = d.pop(SampleBatch.STATE)
+
 
         sliced_batch = SampleBatch(trajectory_length=self.trajectory_length, max_seq_len=self.max_seq_len, **tree.map_structure(lambda x: x[s_seq], d))
         sliced_batch.trajectory_length = len(sliced_batch[SampleBatch.REWARD])
         sliced_batch[SampleBatch.SEQ_LENS] = seq_lens[s]
+        sliced_batch[SampleBatch.STATE] = tree.map_structure(lambda x: x[s], state)
 
         return sliced_batch
 
@@ -212,7 +220,6 @@ def concat_sample_batches(batches: List[SampleBatch]):
     traj_len = sum(b.trajectory_length for b in batches)
 
     new_batch = SampleBatch(traj_len, max_seq_len=batches[0].max_seq_len)
-
     for key in batches[0]:
         if key == SampleBatch.SEQ_LENS:
             new_batch[SampleBatch.SEQ_LENS] = np.concatenate([
@@ -238,6 +245,8 @@ class ExperienceQueue:
 
         self.seq_len = self.config.max_seq_len if self.config.max_seq_len is not None else self.config.trajectory_length
 
+        self.last_batch = None
+
     def push(self, batches: List[SampleBatch]):
         if len({b.get_owner() for b in batches}) != 1:
             raise ValueError("Pushing to queue experience from different policies!")
@@ -262,7 +271,10 @@ class ExperienceQueue:
         samples = self.queue[:num_batches]
         self.queue = self.queue[num_batches:]
 
+        self.last_batch = samples
+
         return samples
+
 
     def is_ready(self):
         return self.queue is not None and (self.queue.size() >= self.config.train_batch_size)

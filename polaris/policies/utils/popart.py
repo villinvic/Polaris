@@ -45,3 +45,14 @@ class Popart:
             "std": self.std.numpy()
         }
 
+    def get_weights(self):
+        return self.get_metrics()
+
+
+    def set_weights(self, w):
+
+        self.mean.assign(w["mean"])
+        self.std.assign(w["std"])
+
+
+

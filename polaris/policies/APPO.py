@@ -105,7 +105,8 @@ class APPO(ParametrisedPolicy):
         time_major_batch[SampleBatch.PREV_REWARD] = np.concatenate([time_major_batch[SampleBatch.PREV_REWARD], time_major_batch[SampleBatch.REWARD][-1:]], axis=0)
         time_major_batch[SampleBatch.PREV_ACTION] = np.concatenate([time_major_batch[SampleBatch.PREV_ACTION], time_major_batch[SampleBatch.ACTION][-1:]], axis=0)
         time_major_batch[SampleBatch.SEQ_LENS] = seq_lens
-        time_major_batch[SampleBatch.STATE] = [s[0] for s in time_major_batch[SampleBatch.STATE]]
+
+        time_major_batch[SampleBatch.STATE] = tree.map_structure(lambda v: v[0], time_major_batch[SampleBatch.STATE])
 
         # Sequence is one step longer if we are not done at timestep T
         time_major_batch[SampleBatch.SEQ_LENS][
@@ -158,9 +159,12 @@ class APPO(ParametrisedPolicy):
                 (action_logits, _), all_vf_preds = self.model(
                     input_batch
                 )
-                (offline_logits, _), _ = self.offline_policy.model(
-                    input_batch
-                )
+                if self.policy_config.target_update_freq == 1:
+                    offline_logits = action_logits
+                else:
+                    (offline_logits, _), _ = self.offline_policy.model(
+                        input_batch
+                    )
 
                 mask_all = tf.transpose(tf.sequence_mask(input_batch[SampleBatch.SEQ_LENS], maxlen=self.config.max_seq_len+1), [1, 0])
                 mask = mask_all[:-1]
