@@ -3,6 +3,9 @@ from typing import Dict, List
 
 class EpisodeCallbacks:
 
+    def __init__(self, config):
+        self.config = config
+
     def on_step(
             self,
             agents_to_policies: Dict[str, "Policy"],

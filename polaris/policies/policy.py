@@ -28,7 +28,7 @@ class Policy(ABC):
         self.observation_space = observation_space
         self.version = 1
         self.options = options
-        self.stats = {} if stats is None else stats
+        self.stats = {"samples_generated": 0} if stats is None else stats
         self.config = config
         self.policy_config = policy_config
         self.model_class = getattr(importlib.import_module(self.config.model_path), self.config.model_class)
@@ -48,6 +48,13 @@ class Policy(ABC):
     def compute_action(
             self,
             input_dict: SampleBatch
+    ):
+        pass
+
+    @abstractmethod
+    def compute_value(
+            self,
+            input_dict
     ):
         pass
 

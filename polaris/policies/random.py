@@ -26,6 +26,12 @@ class RandomPolicy(Policy):
     ):
         return self.action_space.sample(), None
 
+    def compute_value(
+            self,
+            input_dict
+    ):
+        return 0.
+
     def get_weights(self):
         return {}
 

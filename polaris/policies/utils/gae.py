@@ -1,7 +1,10 @@
 import numpy as np
+import scipy
 import tensorflow as tf
+import tree
 from polaris.experience import SampleBatch
 from polaris.experience.sampling import concat_sample_batches
+from polaris.policies import Policy
 
 
 def compute_gae(rewards, dones, values,  discount, gae_lambda, bootstrap_v):
@@ -28,6 +31,133 @@ def compute_gae(rewards, dones, values,  discount, gae_lambda, bootstrap_v):
     returns = tf.reverse(returns, [0])
 
     return tf.stop_gradient(tf.transpose(returns, [1, 0]))
+
+
+def discount_cumsum(x: np.ndarray, gamma: float) -> np.ndarray:
+    """Calculates the discounted cumulative sum over a reward sequence `x`.
+
+    y[t] - discount*y[t+1] = x[t]
+    reversed(y)[t] - discount*reversed(y)[t-1] = reversed(x)[t]
+
+    Args:
+        gamma: The discount factor gamma.
+
+    Returns:
+        The sequence containing the discounted cumulative sums
+        for each individual reward in `x` till the end of the trajectory.
+
+     .. testcode::
+        :skipif: True
+
+        x = np.array([0.0, 1.0, 2.0, 3.0])
+        gamma = 0.9
+        discount_cumsum(x, gamma)
+
+    .. testoutput::
+
+        array([0.0 + 0.9*1.0 + 0.9^2*2.0 + 0.9^3*3.0,
+               1.0 + 0.9*2.0 + 0.9^2*3.0,
+               2.0 + 0.9*3.0,
+               3.0])
+    """
+    return scipy.signal.lfilter([1], [1, float(-gamma)], x[::-1], axis=0)[::-1]
+
+# from RLlib
+def compute_advantages(
+    batch: SampleBatch,
+    last_r: float,
+    gamma: float = 0.9,
+    lambda_: float = 1.0,
+):
+    """Given a rollout, compute its value targets and the advantages.
+
+    Args:
+        rollout: SampleBatch of a single trajectory.
+        last_r: Value estimation for last observation.
+        gamma: Discount factor.
+        lambda_: Parameter for GAE.
+
+    Returns:
+        SampleBatch with experience from rollout and processed rewards.
+    """
+    rewards = batch[SampleBatch.REWARD]
+    vf_preds = batch[SampleBatch.VALUES]
+    not_dones = 1.-np.float32(batch[SampleBatch.DONE])
+
+    vpred_t = np.concatenate([vf_preds, np.array([last_r])])
+    delta_t = rewards + gamma * not_dones * vpred_t[1:] - vpred_t[:-1]
+
+    # TODO: we are one step off
+    delta_t *= np.concatenate([np.array([1.]), not_dones[:-1]])
+
+    # This formula for the advantage comes from:
+    # "Generalized Advantage Estimation": https://arxiv.org/abs/1506.02438
+    batch[SampleBatch.ADVANTAGES] = discount_cumsum(delta_t, gamma * lambda_)
+    batch[SampleBatch.VF_TARGETS] = (
+        batch[SampleBatch.ADVANTAGES] + vf_preds
+    ).astype(np.float32)
+
+    batch[SampleBatch.ADVANTAGES] = batch[SampleBatch.ADVANTAGES].astype(
+        np.float32
+    )
+    return batch
+
+def compute_bootstrap_value(sample_batch: SampleBatch, policy: Policy) -> SampleBatch:
+    """Performs a value function computation at the end of a trajectory.
+    """
+
+    # Trajectory is actually complete -> last r=0.0.
+    if sample_batch[SampleBatch.DONE][-1]:
+        last_r = 0.0
+    # Trajectory has been truncated -> last r=VF estimate of last obs.
+    else:
+        if SampleBatch.VALUES not in sample_batch:
+            # attempt to compute the values here
+            values = policy.compute_value(sample_batch)
+            print(values.shape)
+            sample_batch[SampleBatch.VALUES] = values
+
+        # Input dict is provided to us automatically via the Model's
+        # requirements. It's a single-timestep (last one in trajectory)
+        # input_dict.
+        # Create an input dict according to the Policy's requirements.
+        last_r = policy.compute_value({
+            SampleBatch.OBS: tree.map_structure(lambda v: v[-1],
+                                                sample_batch[SampleBatch.NEXT_OBS]),
+            SampleBatch.PREV_ACTION: sample_batch[SampleBatch.ACTION][-1],
+            SampleBatch.PREV_REWARD: sample_batch[SampleBatch.REWARD][-1],
+            # TODO: should correspond to the very last state here
+            SampleBatch.STATE: sample_batch[SampleBatch.NEXT_STATE]
+        })
+
+    sample_batch["bootstrap_value"] = last_r
+    return sample_batch
+
+
+def compute_gae_for_sample_batch(
+    policy: Policy,
+    sample_batch: SampleBatch,
+) -> SampleBatch:
+
+    # Compute the SampleBatch.VALUES_BOOTSTRAPPED column, which we'll need for the
+    # following `last_r` arg in `compute_advantages()`.
+    sample_batch = compute_bootstrap_value(sample_batch, policy)
+
+    # Adds the policy logits, VF preds, and advantages to the batch,
+    # using GAE ("generalized advantage estimation") or not.
+
+    batch = compute_advantages(
+        batch=sample_batch,
+        last_r=sample_batch["bootstrap_value"],
+        gamma=policy.policy_config.discount,
+        lambda_=policy.policy_config.gae_lambda,
+    )
+
+    #if batch[SampleBatch.DONE][-1]:
+    #    print(batch[SampleBatch.ADVANTAGES])
+
+    return batch
+
 
 if __name__ == '__main__':
     q = SampleBatch(20)

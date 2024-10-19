@@ -33,7 +33,7 @@ def unpickle_from_dir(path):
         for file in files:
             if file.endswith(".pkl"):
                 with open(os.path.join(full_path, file), "rb") as f:
-                    to_fill[file.rstrip(".pkl")] = pickle.load(f)
+                    to_fill[file[:-4]] = pickle.load(f)
 
     return unpickled
 

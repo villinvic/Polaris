@@ -74,6 +74,12 @@ class BaseModel(snt.Module):
         return None
 
 
+    def prepare_single_input(self, input_dict: SampleBatch):
+        input_dict[SampleBatch.SEQ_LENS] = tf.expand_dims(1, axis=0)
+        input_dict["single_obs"] = True
+        return input_dict
+
+
     def compute_action(
             self,
             input_dict: SampleBatch
@@ -82,8 +88,7 @@ class BaseModel(snt.Module):
         tx = []
         t = time.time()
         #batch_input_dict = tree.map_structure(expand_values, input_dict)
-        input_dict[SampleBatch.SEQ_LENS] = tf.expand_dims(1, axis=0)
-        input_dict["single_obs"] = True
+        self.prepare_single_input(input_dict)
 
         tx.append(time.time() - t)
         t = time.time()
@@ -103,6 +108,16 @@ class BaseModel(snt.Module):
 
         return out + (tx,)
 
+    def compute_value(self, input_dict: SampleBatch):
+        self.prepare_single_input(input_dict)
+        return self._compute_value(input_dict).numpy()
+
+
+    @tf.function
+    def _compute_value(self, input_dict):
+        _, value = self(input_dict)
+        return value
+
 
     @tf.function
     def _compute_action_dist(self, input_dict):
@@ -112,4 +127,6 @@ class BaseModel(snt.Module):
         action = action_dist.sample()
         logp = action_dist.logp(action)
         return (action_logits, state), value, action, logp
+
+
 
