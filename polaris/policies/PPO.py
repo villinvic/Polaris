@@ -224,7 +224,7 @@ class PPO(ParametrisedPolicy):
                 aux_loss = self.model.aux_loss(**input_batch)
 
                 total_loss = (critic_loss + policy_loss - mean_entropy * self.policy_config.entropy_cost + kl_loss
-                              + 0.1 * aux_loss)
+                              + self.policy_config.aux_loss_weight * aux_loss)
 
         gradients = tape.gradient(total_loss, self.model.trainable_variables)#+ (self.old_log_kl_coeff,))
         gradients, mean_grad_norm = tf.clip_by_global_norm(gradients, self.policy_config.grad_clip)
