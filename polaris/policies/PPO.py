@@ -237,7 +237,7 @@ class PPO(ParametrisedPolicy):
             tf.boolean_mask(vf_preds, mask)
         )
 
-        return {
+        train_metrics = {
             "mean_entropy": mean_entropy,
             "vf_loss": critic_loss,
             "pi_loss": policy_loss,
@@ -248,3 +248,7 @@ class PPO(ParametrisedPolicy):
             "kl_coeff": self.kl_coeff,
             "aux_loss": aux_loss
         }
+
+        train_metrics.update(self.model.get_metrics())
+
+        return train_metrics
