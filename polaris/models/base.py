@@ -85,28 +85,22 @@ class BaseModel(snt.Module):
             input_dict: SampleBatch
     ):
 
-        tx = []
         t = time.time()
         #batch_input_dict = tree.map_structure(expand_values, input_dict)
         self.prepare_single_input(input_dict)
 
-        tx.append(time.time() - t)
-        t = time.time()
 
-
-        (action_logits, state), value, action, logp = self._compute_action_dist(
+        (action_logits, state), value, action, logp, extras = self._compute_action_dist(
             input_dict
         )
-
-        tx.append(time.time() - t)
-        t = time.time()
 
         out = (action.numpy(), tree.map_structure(lambda v: v.numpy(), state), logp.numpy(),
                action_logits.numpy(), value.numpy())
 
-        tx.append(time.time() - t)
 
-        return out + (tx,)
+        extras["compute_action_ms"] = time.time() - t
+
+        return out + (extras,)
 
     def compute_value(self, input_dict: SampleBatch):
         self.prepare_single_input(input_dict)
@@ -121,12 +115,12 @@ class BaseModel(snt.Module):
 
     @tf.function
     def _compute_action_dist(self, input_dict):
-        (action_logits, state), value = self(input_dict)
+        (action_logits, state), value, extras = self(input_dict)
         action_logits = tf.squeeze(action_logits)
         action_dist = self.action_dist(action_logits)
         action = action_dist.sample()
         logp = action_dist.logp(action)
-        return (action_logits, state), value, action, logp
+        return (action_logits, state), value, action, logp, extras
 
 
 

@@ -81,7 +81,7 @@ class FCModel(BaseModel):
         pi_out = self._pi_out(x)
         self._values = tf.squeeze(self._value_out(x))
 
-        return (pi_out, None), self._values
+        return (pi_out, None), self._values, {}
 
 
 class FCModelNoBias(BaseModel):

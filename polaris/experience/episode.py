@@ -72,6 +72,7 @@ class Episode:
         action_logp = {}
         action_logits = {}
         values = {}
+        extras = {}
 
         prev_actions = {aid: 0 for aid in self.agents_to_policies}
         prev_rewards = {aid: 0. for aid in self.agents_to_policies}
@@ -89,7 +90,7 @@ class Episode:
 
         while not dones["__all__"]:
             for aid, policy in self.agents_to_policies.items():
-                actions[aid], next_states[aid], action_logp[aid], action_logits[aid], values[aid], ti = policy.compute_action(
+                actions[aid], next_states[aid], action_logp[aid], action_logits[aid], values[aid], extras[aid] = policy.compute_action(
                     {
                         SampleBatch.OBS: observations[aid],
                         SampleBatch.PREV_ACTION: prev_actions[aid],
@@ -146,6 +147,8 @@ class Episode:
                             SampleBatch.T: t,
 
                             SampleBatch.VALUES: values[aid],
+
+                            **extras[aid],
                         },
                         flush=done
                     )

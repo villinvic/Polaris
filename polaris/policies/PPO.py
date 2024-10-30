@@ -134,7 +134,6 @@ class PPO(ParametrisedPolicy):
             metrics = self._train(
                 input_batch=minibatch
             )
-            print(metrics)
 
         sampled_kl = metrics["kl"]
         kl_coeff_val = self.kl_coeff.value()
