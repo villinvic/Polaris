@@ -109,7 +109,7 @@ class BaseModel(snt.Module):
 
     @tf.function
     def _compute_value(self, input_dict):
-        _, value = self(input_dict)
+        _, value, _ = self(input_dict)
         return value
 
 

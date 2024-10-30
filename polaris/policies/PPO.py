@@ -170,7 +170,7 @@ class PPO(ParametrisedPolicy):
         #B, T = tf.shape(input_batch[SampleBatch.OBS])
         with tf.GradientTape() as tape:
             with tf.device('/gpu:0'):
-                (action_logits, _), vf_preds = self.model(
+                (action_logits, _), vf_preds, _ = self.model(
                     input_batch
                 )
                 mask = tf.transpose(tf.sequence_mask(input_batch[SampleBatch.SEQ_LENS], maxlen=self.config.max_seq_len), [1, 0])
