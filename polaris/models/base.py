@@ -53,7 +53,7 @@ class BaseModel(snt.Module):
         )
         return action.numpy(), state
 
-    @tf.function(jit_compile=False)
+    @tf.function(jit_compile=True)
     def _compute_single_action(
             self,
             obs,
@@ -94,7 +94,7 @@ class BaseModel(snt.Module):
         extras["compute_single_action_with_extras_ms"] = time.time() - t
         return action.numpy(), tree.map_structure(lambda v: v.numpy(), state), extras
 
-    @tf.function(jit_compile=False)
+    @tf.function(jit_compile=True)
     def _compute_single_action_with_extras(
             self,
             obs,
