@@ -121,7 +121,7 @@ class Episode:
                 if not dones[aid] or dones["__all__"]:
                     # TODO: check on done
                     done = dones[aid] or dones["__all__"]
-                    print(actions[aid], extras)
+                    print(actions[aid], extras[aid])
                     batches += sample_batches[aid].push(
                         {
                             SampleBatch.OBS: observations[aid],

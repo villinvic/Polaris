@@ -21,6 +21,7 @@ class ParametrisedPolicy(Policy):
 
     def set_weights(self, weights: Dict):
         x = {v.name: v for v in self.model.trainable_variables}
+        print(list(weights.keys()))
         for name, w in weights.items():
             x[name].assign(w)
 
