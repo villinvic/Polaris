@@ -64,7 +64,7 @@ class DummyEnv(PolarisEnv):
 class PolarisCartPole(CartPoleEnv, PolarisEnv):
     env_id = "PolarisCartPole"
 
-    def __init__(self, env_index, **config):
+    def __init__(self, env_index=0, **config):
 
         PolarisEnv.__init__(self, env_index=env_index)
         CartPoleEnv.__init__(self)
