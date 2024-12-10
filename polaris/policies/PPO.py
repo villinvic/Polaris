@@ -95,15 +95,7 @@ class PPO(ParametrisedPolicy):
             metrics = self._train(
                 **minibatch
             )
-            di = {
-                m: v.numpy() for m,v  in metrics.items()
-            }
-            print(di)
-            if np.any(np.isnan(list(di.values()))):
-                print(minibatch[SampleBatch.ADVANTAGES])
-                print(minibatch[SampleBatch.VF_TARGETS])
 
-                exit()
 
         last_kl = metrics["kl"]
         kl_coeff_val = self.kl_coeff.value()
@@ -158,7 +150,7 @@ class PPO(ParametrisedPolicy):
                 prev_action_dist = self.model.action_dist(action_logits)
                 entropy = tf.boolean_mask(curr_action_dist.entropy(), mask)
 
-                logp_ratio = tf.exp(tf.stop_gradient(curr_action_logp) - action_logp)
+                logp_ratio = tf.exp(curr_action_logp - action_logp)
 
                 surrogate_loss = tf.minimum(
                     advantages * logp_ratio,
@@ -196,7 +188,6 @@ class PPO(ParametrisedPolicy):
 
         self.model.optimiser.apply(gradients, self.model.trainable_variables)
 
-        mean_entropy = tf.reduce_mean(entropy)
         explained_vf = explained_variance(
             tf.boolean_mask(vf_targets, mask),
             tf.boolean_mask(vf_preds, mask)
@@ -211,7 +202,10 @@ class PPO(ParametrisedPolicy):
             "kl": mean_kl,
             "kl_loss": kl_loss,
             "kl_coeff": self.kl_coeff,
-            "logp_ratio": tf.reduce_mean(tf.boolean_mask(logp_ratio, mask))
+            "logp_ratio": tf.reduce_mean(tf.boolean_mask(logp_ratio, mask)),
+            "x": vf_targets,
+            "y": vf_preds
+
         }
 
         train_metrics.update(self.model.get_metrics())
