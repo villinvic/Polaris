@@ -24,11 +24,8 @@ class PPO(ParametrisedPolicy):
             SampleBatch.ACTION_LOGITS,
             SampleBatch.ACTION_LOGP,
             SampleBatch.ADVANTAGES,
-            SampleBatch.VF_TARGETS,
-
-            SampleBatch.DONE,
-            SampleBatch.REWARD
-                   ]
+            SampleBatch.VF_TARGETS
+            ]
 
     def __init__(
             self,
@@ -95,11 +92,6 @@ class PPO(ParametrisedPolicy):
                                     minibatch_size=self.config.minibatch_size
                                     ):
 
-            print(minibatch[SampleBatch.REWARD][:, 0],
-             minibatch[SampleBatch.DONE][:, 0], minibatch[SampleBatch.VF_TARGETS][:, 0])
-
-            del minibatch[SampleBatch.REWARD]
-            del minibatch[SampleBatch.DONE]
             metrics = self._train(
                 **minibatch
             )
@@ -169,7 +161,7 @@ class PPO(ParametrisedPolicy):
                     ),
                 )
 
-                policy_loss = -tf.reduce_mean(tf.boolean_mask(surrogate_loss, mask))
+                policy_loss = -tf.reduce_mean(tf.boolean_mask(surrogate_loss, mask)) * 0.
 
                 critic_loss = self.model.critic_loss(vf_targets)
                 critic_loss_clipped = tf.clip_by_value(
@@ -181,7 +173,7 @@ class PPO(ParametrisedPolicy):
                 mean_entropy = tf.reduce_mean(entropy)
 
                 if self.policy_config.initial_kl_coeff > 0.0:
-                    kl_behavior_to_online = tf.boolean_mask(behavior_dist.kl(curr_action_logits), mask)
+                    kl_behavior_to_online = tf.boolean_mask(prev_action_dist.kl(curr_action_logits), mask)
                     mean_kl =  tf.reduce_mean(kl_behavior_to_online)
                     kl_loss = mean_kl * self.kl_coeff
 
