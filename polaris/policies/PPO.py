@@ -95,7 +95,9 @@ class PPO(ParametrisedPolicy):
             metrics = self._train(
                 **minibatch
             )
-            print(metrics)
+            print({
+                m: v.numpy() for m,v  in metrics.items()
+            })
 
         last_kl = metrics["kl"]
         kl_coeff_val = self.kl_coeff.value()
