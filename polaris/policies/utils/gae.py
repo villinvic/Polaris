@@ -71,18 +71,20 @@ def compute_advantages(
     vf_preds = batch[SampleBatch.VALUES]
     not_dones = 1.-np.float32(batch[SampleBatch.DONE])
 
+    next_not_dones = np.concatenate([np.array([1.]), not_dones[:-1]])
+
     vpred_t = np.concatenate([vf_preds, np.array([last_r])])
     delta_t = rewards + gamma * not_dones * vpred_t[1:] - vpred_t[:-1]
 
     # TODO: we are one step off
-    delta_t *= np.concatenate([np.array([1.]), not_dones[:-1]])
+    delta_t *= next_not_dones
 
     # This formula for the advantage comes from:
     # "Generalized Advantage Estimation": https://arxiv.org/abs/1506.02438
     batch[SampleBatch.ADVANTAGES] = discount_cumsum(delta_t, gamma * lambda_)
     batch[SampleBatch.VF_TARGETS] = (
         batch[SampleBatch.ADVANTAGES] + vf_preds
-    ).astype(np.float32) * not_dones
+    ).astype(np.float32) * next_not_dones
 
     batch[SampleBatch.ADVANTAGES] = batch[SampleBatch.ADVANTAGES].astype(
         np.float32
