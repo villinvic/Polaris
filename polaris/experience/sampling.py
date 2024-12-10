@@ -27,6 +27,7 @@ class SampleBatch(dict):
     VALUES = "values"
     ADVANTAGES = "advantages"
     VF_TARGETS = "vf_targets"
+    BOOTSTRAP_VALUE = "bootstrap_value"
 
 
     SEQ_LENS = "seq_lens" # Does not have the time dimension
@@ -139,10 +140,6 @@ class SampleBatch(dict):
 
             self.index = self.trajectory_length
 
-            # last_seq_len = self.index - sum(self[SampleBatch.SEQ_LENS])
-            # self[SampleBatch.SEQ_LENS].append(last_seq_len)
-            # truncated = self[:self.index]
-            # self.index = self.trajectory_length
             return [self]
         return []
         # when full, reset and send batch
@@ -180,7 +177,6 @@ class SampleBatch(dict):
         batch[self.index] = v
 
     def get_owner(self):
-        #assert np.all(super().__getitem__("policy_id")[0] == super().__getitem__("policy_id")), super().__getitem__("policy_id")
         return super().__getitem__(SampleBatch.POLICY_ID)[0]
 
     def get_aid(self):
@@ -201,37 +197,6 @@ class SampleBatch(dict):
 
         states = self[SampleBatch.STATE]
         states += [states[-1]] * missing_bits
-
-        # split_indices = np.cumsum(seq_lens)[:-1]
-        #
-        # def get_padding(element, seq_len):
-        #     rank = len(element.shape)
-        #     p = ((0, self.max_seq_len-seq_len),) + ((0,0),) * (rank - 1)
-        #     #print(np.pad(element, p).shape, element.shape, seq_len)
-        #     return ((0, self.max_seq_len-seq_len),) + ((0,0),) * (rank - 1)
-        #
-        # def split_pad_concat(full_seq):
-        #     sequences = np.split(full_seq, split_indices, axis=0)
-        #     print(split_indices)
-        #     print([s.shape for s in sequences])
-        #     return np.concatenate([
-        #         np.pad(seq, get_padding(seq, seq_len))
-        #         for seq, seq_len in zip(sequences, seq_lens)
-        #     ])
-        #
-        # d = dict(self)
-        # seq_lens = d.pop(SampleBatch.SEQ_LENS)
-        # d.pop("bootstrap_value")
-        # d.pop(SampleBatch.NEXT_STATE)
-        # new_batch = SampleBatch(trajectory_length=self.trajectory_length, max_seq_len=self.max_seq_len, **tree.map_structure(
-        #     split_pad_concat,
-        #     d
-        # ))
-        # new_batch[SampleBatch.SEQ_LENS] = seq_lens
-        #
-        # print("action?",new_batch[SampleBatch.ACTION].shape)
-        #
-        # print(seq_lens, self.max_seq_len*len(seq_lens), new_batch.trajectory_length)
 
         self[SampleBatch.SEQ_LENS] = seq_lens
 
@@ -270,7 +235,7 @@ def concat_sample_batches(batches: List[SampleBatch]):
                 p,
                 *states
             )
-        elif key in ("bootstrap_value", SampleBatch.NEXT_STATE):
+        elif key in (SampleBatch.BOOTSTRAP_VALUE, SampleBatch.NEXT_STATE):
             pass
         else:
             new_batch[key] = tree.map_structure(
@@ -330,7 +295,12 @@ class ExperienceQueue:
 
     def size(self):
         return 0 if self.queue is None else self.queue.size()
+
     def get_epochs(self, n_epochs):
+        """
+        Deprecated
+        """
+
         for k in range(n_epochs):
 
             ordering = np.arange(self.config.train_batch_size // self.config.minibatch_size)
@@ -341,9 +311,11 @@ class ExperienceQueue:
                 yield self.queue.get_from_indices(indices)
 
 
-
-
 def get_epochs(time_major_batch, n_epochs, minibatch_size):
+    """
+    Constructs epochs constructed with minibatches of specified size.
+    Minibatches are shuffled between each epoch.
+    """
     max_seq_len, n_trajectories = time_major_batch[SampleBatch.ACTION].shape[:2]
     seq_lens = np.array(time_major_batch.pop(SampleBatch.SEQ_LENS))
     state = time_major_batch.pop(SampleBatch.STATE)
@@ -368,43 +340,4 @@ def get_epochs(time_major_batch, n_epochs, minibatch_size):
             if next_state is not None:
                 minibatch[SampleBatch.NEXT_STATE] = tree.map_structure(lambda x: x[indices], next_state)
 
-            #print(minibatch[SampleBatch.ACTION].shape)
             yield minibatch
-
-if __name__ == '__main__':
-
-    q = SampleBatch(20, max_seq_len=5)
-    q2 = SampleBatch(20, max_seq_len=5)
-    ep_id = 0
-    t = 0
-    for i in range(20):
-        done = np.random.random() < 0.1
-        q.push({SampleBatch.OBS   : np.array([1, 2]), SampleBatch.ACTION: 2, SampleBatch.EPISODE_ID: ep_id,
-                SampleBatch.REWARD: np.float32(np.random.randint(5)), SampleBatch.DONE: done,
-                SampleBatch.T : t})
-        t += 1
-        if done:
-            ep_id += 1
-            t = 0
-
-    t = 0
-    ep_id = 25
-    for i in range(20):
-        done = np.random.random() < 0.1
-
-        q2.push({SampleBatch.OBS   : np.array([1, 2]), SampleBatch.ACTION: 2, SampleBatch.EPISODE_ID: ep_id,
-                SampleBatch.REWARD: np.float32(np.random.randint(5)), SampleBatch.DONE: done, SampleBatch.T : t})
-        t += 1
-        if done:
-            t = 0
-            ep_id += 1
-    q = concat_sample_batches([q, q2])
-    padded_batch = q.pad_and_split_to_sequences()
-    print(padded_batch[SampleBatch.DONE], padded_batch[SampleBatch.SEQ_LENS])
-    trunc_batch = padded_batch[:5]
-    print(trunc_batch[SampleBatch.DONE], trunc_batch[SampleBatch.SEQ_LENS])
-    exit()
-    q = concat_sample_batches([q, q2])
-    q.compute_episode_slicing_indices()
-    print(q.episode_slicing_indices)
-    print(q.get_seq_lens(3))

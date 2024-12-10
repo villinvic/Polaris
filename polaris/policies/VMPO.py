@@ -53,7 +53,9 @@ def compute_policy_loss(top_half_online_logp, annealed_top_half_exp_advantage):
     return - tf.reduce_sum(top_half_online_logp * annealed_top_half_exp_advantage)
 
 class VMPO(ParametrisedPolicy):
-    # TODO: take care of the loss, tophalf adv, not much more i think
+    """
+    TODO: Out-of-date
+    """
 
     def __init__(
             self,

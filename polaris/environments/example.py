@@ -132,33 +132,3 @@ class PolarisLunarLander(LunarLander, PolarisEnv):
 
         return d
 
-
-if __name__ == '__main__':
-
-    env = DummyEnv()
-    env.register()
-
-    retrieved_env = _global_registry.get(ENV_CREATOR, "cartpole")()
-
-    policies = [
-        RandomPolicy(
-            name="randompi1",
-            action_space=retrieved_env.action_space,
-            observation_space=retrieved_env.observation_space
-            )
-    ]
-    agents_to_policies = {
-        aid: pi for aid, pi in zip(retrieved_env.get_agent_ids(), policies)
-    }
-
-    sample_batches = {
-        aid: SampleBatch(8) for aid in retrieved_env.get_agent_ids()
-    }
-
-    for batches in Episode(retrieved_env, agents_to_policies, None).run(sample_batches):
-        print(batches)
-        input()
-
-    print(sample_batches)
-
-

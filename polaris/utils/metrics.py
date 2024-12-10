@@ -46,7 +46,7 @@ class _GlobalTimer(GlobalVars):
         self._dt = defaultdict(lambda : 1e9)
         self.startup_time = time.time()
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value: float):
         with self.lock:
             prev = self[key]
             value = value - self.startup_time
@@ -56,24 +56,20 @@ class _GlobalTimer(GlobalVars):
     def dt(self, key):
         return self._dt[key]
 
+    def get_dt(self, key) -> float:
+        self[key] = time.time()
+        return self.dt(key)
+
 GlobalCounter = _GlobalCounter()
+"""
+This variable can be used anywhere in the main training process, for keeping tracks of counts, such as number of environment steps.
+"""
+
+
 GlobalTimer = _GlobalTimer()
-
-def merge(args):
-    if any(not isinstance(i, dict) for i in args):
-        return np.array([args[0]]) if len(args) == 1 else np.array(args)
-    d = defaultdict(list)
-    for i in args:
-        for a, b in i.items():
-            d[a].append(b)
-    return {a: merge(b) for a, b in d.items()}
-
-def average_dict(data: list):
-    return tree.map_structure(
-        lambda v: np.mean(v),
-        merge(data)
-    )
-
+"""
+This variable can be used anywhere in the main training process, for keeping tracks of timings, such time required for an iteration.
+"""
 
 class Metric:
     def __init__(
@@ -85,11 +81,18 @@ class Metric:
             save_history=False,
     ):
         """
+        Metric class, uses exponential moving average for updating the metric.
+        A metric can be:
+            - An int/float
+            - A dict: will be interpreted as categorical data and converted to a barplot
+            - An array: will report mean, max and min of the array.
+
         :param name: name of the metric
         :param init_value: to which value the metric should be initialised, None (default) will initialise to the first value observed
-        :param smoothing: Smoothing factor
+        :param smoothing: exponential moving average smoothing factor
         :param n_init: How many samples before estimating the first next value ?
         """
+
         if isinstance(init_value, np.ndarray) and init_value.dtype == object:
             init_value = init_value.item()
 
@@ -116,7 +119,6 @@ class Metric:
         # hack for dicts/barplots
         if isinstance(value, np.ndarray) and value.dtype == object:
             value = value.item()
-
 
         if value is not None:
             if self._v is None:
@@ -180,7 +182,9 @@ class Metric:
     def is_old(self):
         return (not hasattr(self, "last_update")) or (GlobalCounter["step"] - self.last_update > 100)
 
+
 class Metrics(dict): pass
+
 
 class MetricBank:
 
@@ -189,10 +193,12 @@ class MetricBank:
 
     def __init__(
             self,
-            report_freq=3,
-            metrics=Metrics(),
+            report_freq: int =3,
+            metrics: Metrics = Metrics(),
             ):
         """
+        Metric bank class. This should be used to store all the metrics relevant to a run.
+        c.f. the update() and report() methods.
 
         :param dirname: path to the tensorboard logs.
         :param report_freq: frequency at which the bank reports to tensorboard (alleviates disk memory usage)
@@ -208,16 +214,38 @@ class MetricBank:
         #self.writer = tf.summary.create_file_writer(self.logdir)
 
 
-    def get(self):
-        return self.metrics
+    def get(
+            self,
+            key,
+            value_if_not_found=None
+    ):
+        """
+        Works the same as the dict.get() function.
+        """
+        return self.metrics.get(key, value_if_not_found)
 
-    def track_metric(self, name: str, init_value=None, smoothing=0.0, n_init=1, save_history=False):
+    def track_metric(
+            self,
+            name: str,
+            init_value=None,
+            smoothing=0.0,
+            n_init=1,
+            save_history=False
+    ):
         # TODO : take care of hist, etc
         self.metrics[name] = Metric(name, init_value, smoothing, n_init, save_history)
 
-    def update(self, batch, n_samples=1, prefix="", smoothing=0.0):
+    def update(
+            self,
+            batch,
+            n_samples=1,
+            prefix="",
+            smoothing=0.0
+    ):
         """
-        :param batch: iteration data, data that is tracked by this bank will be updated.
+        Updates the bank with a new batch of metrics.
+
+        :param batch: data batch, data that is tracked by this bank will be updated.
         :param n_samples: how many samples are contained in the batch
         :param prefix: additional prefix for the batch metrics
         :param smoothing: smoothing for new entries
@@ -236,13 +264,28 @@ class MetricBank:
                         init_value=value,
                         smoothing=smoothing
                     )
-    def report(self, print_metrics=False):
+
+    def report(
+            self,
+            print_metrics=False
+    ):
+        """
+        Reports the metrics to wandb.
+
+        :param print_metrics: to print the metrics to the terminal as well.
+        """
 
         if self.last_report != GlobalCounter["step"] and GlobalCounter["step"] % self.report_freq == 0:
             self.last_report = GlobalCounter["step"]
             if print_metrics:
                 print(f"==================================== Iteration {GlobalCounter['step']} ====================================")
             to_delete = []
+
+            # Update existing counters to the bank, only when reporting.
+            self.update(
+                tree.flatten_with_path(GlobalCounter.get()), prefix="counters/"
+            )
+
             for name, metric in self.metrics.items():
                 if metric.is_old():
                     to_delete.append(name)
@@ -252,7 +295,6 @@ class MetricBank:
                     print(f"{name:<55}:\t{metric.get():.5f}")
             for k in to_delete:
                 del self.metrics[k]
-
 
 
 def metric_path_name(metric_path):

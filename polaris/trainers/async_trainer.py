@@ -16,7 +16,7 @@ from polaris.environments.polaris_env import PolarisEnv
 from polaris.policies.policy import Policy, PolicyParams, ParamsMap
 from polaris.experience.matchmaking import RandomMatchmaking
 from polaris.experience.sampling import ExperienceQueue, SampleBatch
-from polaris.utils.metrics import MetricBank, GlobalCounter, GlobalTimer, average_dict
+from polaris.utils.metrics import MetricBank, GlobalCounter, GlobalTimer
 
 import psutil
 
@@ -27,6 +27,11 @@ class AsyncTrainer(Checkpointable):
             config: ConfigDict,
             restore=False,
     ):
+        """
+        TODO: Out-of-date
+        """
+
+
         self.config = config
         self.worker_set = WorkerSet(
             config

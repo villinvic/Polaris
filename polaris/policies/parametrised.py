@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Any, Tuple
 
 import numpy as np
 
@@ -9,25 +9,11 @@ import tensorflow as tf
 from polaris.experience import SampleBatch
 
 class ParametrisedPolicy(Policy):
+    """
+    A parametrised policy has a tensorflow model as its core.
+    """
+
     policy_type = "parametrised"
-
-    def compute_action(
-            self,
-            input_dict
-    ):
-        return self.model.compute_action(input_dict)
-
-    def compute_value(self, input_dict):
-        return self.model.compute_value(input_dict)
-
-    @tf.function
-    def _compute_action_dist(
-            self,
-            input_dict
-    ):
-        return self.model(input_dict)
-
-
 
     def get_weights(self) -> Dict[str, np.ndarray]:
         return {v.name: v.numpy()
@@ -37,3 +23,50 @@ class ParametrisedPolicy(Policy):
         x = {v.name: v for v in self.model.trainable_variables}
         for name, w in weights.items():
             x[name].assign(w)
+
+    def compute_single_action(
+            self,
+            *,
+            obs,
+            prev_action,
+            prev_reward,
+            state,
+    ) -> Tuple[Any, Any]:
+        return self.model.compute_single_action(
+            obs,
+            prev_action,
+            prev_reward,
+            state,
+        )
+
+    def compute_single_action_with_extras(
+            self,
+            *,
+            obs,
+            prev_action,
+            prev_reward,
+            state,
+    ) -> Tuple[Any, Any, dict]:
+        return self.model.compute_single_action_with_extras(
+            obs,
+            prev_action,
+            prev_reward,
+            state,
+        )
+
+    def compute_value_batch(
+            self,
+            *,
+            obs,
+            prev_action,
+            prev_reward,
+            state,
+            seq_lens,
+    ) -> Any:
+        return self.model(
+            obs=obs,
+            prev_action=prev_action,
+            prev_reward=prev_reward,
+            state=state,
+            seq_lens=seq_lens,
+        )[2][SampleBatch.VALUES]

@@ -9,7 +9,7 @@ from ray.tune.registry import _global_registry, ENV_CREATOR
 
 class PolarisEnv(Env):
 
-    env_id = "abstract"
+    env_id = "unset"
 
     @classmethod
     def register(cls):

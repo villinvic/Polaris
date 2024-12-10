@@ -1,3 +1,7 @@
+from abc import abstractmethod
+from typing import Union, Tuple, Any
+
+import numpy as np
 import sonnet as snt
 import tree
 from gymnasium.spaces import Space, Dict, Box, Discrete
@@ -8,13 +12,6 @@ import time
 
 from polaris.experience import SampleBatch
 
-
-
-def expand_values(v):
-    if v is None:
-        return v
-    else:
-        return tf.expand_dims([v], axis=0)
 
 class BaseModel(snt.Module):
     is_recurrent = False
@@ -32,95 +29,200 @@ class BaseModel(snt.Module):
         self.observation_space = observation_space
         self.num_outputs = None
         self.config = config
-        self.optimiser: Optimizer = None
+        self.optimiser: Union[None, Optimizer] = None
 
         self._values = None
         self.action_dist = None
 
-
-    @snt.once
-    def setup(self):
-        self.initialise()
-
-    def __call__(self, input_dict):
-
-        return self.forward(**input_dict)
-
-
-    def initialise(self):
-        """
-        Initialise the layers and model related stuffs
-        """
-        pass
-
-    def forward(self, **input_dict):
-        """
-        Does a pass forward
-        :param input_dict: data needed to make a pass forward
-        :return: main output of the model -> actions
-        """
-        raise NotImplementedError
-
-
-    def value_function(self):
-        """
-
-        :return: the values predicted from the previous pass
-        """
-        return self._values
-
-    def get_initial_state(self):
-
-        return None
-
-
-    def prepare_single_input(self, input_dict: SampleBatch):
-        input_dict[SampleBatch.SEQ_LENS] = tf.expand_dims(1, axis=0)
-        input_dict["single_obs"] = True
-        return input_dict
-
-
-    def compute_action(
+    def compute_single_action(
             self,
-            input_dict: SampleBatch
+            obs,
+            prev_action,
+            prev_reward,
+            state,
+    ) -> Tuple[Any, Any]:
+        """
+        This is supposed to be only used when computing actions in spectator workers.
+        """
+
+        action, state = self._compute_single_action(
+            obs,
+            prev_action,
+            prev_reward,
+            state,
+        )
+        return action.numpy(), state
+
+    @tf.function(jit_compile=True)
+    def _compute_single_action(
+            self,
+            obs,
+            prev_action,
+            prev_reward,
+            state,
     ):
+        action_logits, state = self.forward_single_action(
+            obs,
+            prev_action,
+            prev_reward,
+            state
+        )
+        action_logits = tf.squeeze(action_logits)
+        action_dist = self.action_dist(action_logits)
+        action = action_dist.sample()
+        return action, state
 
+    def compute_single_action_with_extras(
+            self,
+            obs,
+            prev_action,
+            prev_reward,
+            state
+    ) -> Tuple[Any, Any, dict]:
+        """
+        Computes action, with next_states and extras.
+        Should at least have action_logp, action_logits, values, kwargs in the extras.
+        """
         t = time.time()
-        #batch_input_dict = tree.map_structure(expand_values, input_dict)
-        self.prepare_single_input(input_dict)
+        action, state, extras = self._compute_single_action_with_extras(
+            obs,
+            prev_action,
+            prev_reward,
+            state
+        )
+        extras = tree.map_structure(lambda v: v.numpy(), extras)
+        extras["compute_single_action_with_extras_ms"] = time.time() - t
+        return action.numpy(), tree.map_structure(lambda v: v.numpy(), state), extras
 
-
-        (action_logits, state), value, action, logp, extras = self._compute_action_dist(
-            input_dict
+    @tf.function(jit_compile=True)
+    def _compute_single_action_with_extras(
+            self,
+            obs,
+            prev_action,
+            prev_reward,
+            state,
+    ):
+        action_logits, state, extras = self.forward_single_action_with_extras(
+            obs,
+            prev_action,
+            prev_reward,
+            state
         )
 
-        out = (action.numpy(), tree.map_structure(lambda v: v.numpy(), state), logp.numpy(),
-               action_logits.numpy(), value.numpy())
-
-
-        extras["compute_action_ms"] = time.time() - t
-
-        return out + (extras,)
-
-    def compute_value(self, input_dict: SampleBatch):
-        self.prepare_single_input(input_dict)
-        return self._compute_value(input_dict).numpy()
-
-
-    @tf.function
-    def _compute_value(self, input_dict):
-        _, value, _ = self(input_dict)
-        return value
-
-
-    @tf.function
-    def _compute_action_dist(self, input_dict):
-        (action_logits, state), value, extras = self(input_dict)
         action_logits = tf.squeeze(action_logits)
         action_dist = self.action_dist(action_logits)
         action = action_dist.sample()
         logp = action_dist.logp(action)
-        return (action_logits, state), value, action, logp, extras
+
+        action_logits = tf.squeeze(action_logits)
+        action_dist = self.action_dist(action_logits)
+        action = action_dist.sample()
+
+        extras[SampleBatch.ACTION_LOGP] = logp
+        extras[SampleBatch.ACTION_LOGITS] = action_logits
+
+        return action, state, extras
+
+    def setup(self):
+        """
+        Initialise the layers and model related variables.
+        """
+        # TODO: is this fine to pick an arbitrary shape of batch ?
+        T = 5
+        B = 3
+
+        x = self.observation_space.sample()
+        dummy_obs = tree.map_structure(
+            lambda v: np.zeros_like(v, shape=(T, B) + v.shape),
+            x
+        )
+        dummy_reward = np.zeros((T, B), dtype=np.float32)
+        dummy_action = np.zeros((T, B), dtype=np.int32)
+
+        dummy_state_0 = self.get_initial_state()
+
+        dummy_state = tree.map_structure(
+            lambda v: np.repeat(v, B, axis=0), dummy_state_0
+        )
+        seq_lens = np.ones((B,), dtype=np.int32) * T
+
+        self(
+            obs=dummy_obs,
+            prev_action=dummy_action,
+            prev_reward=dummy_reward,
+            state=dummy_state,
+            seq_lens=seq_lens
+        )
+
+        self.compute_single_action(
+            obs=x,
+            prev_action=dummy_action[0, 0],
+            prev_reward=dummy_reward[0, 0],
+            state=dummy_state_0,
+        )
+        self.compute_single_action_with_extras(
+            obs=x,
+            prev_action=dummy_action[0, 0],
+            prev_reward=dummy_reward[0, 0],
+            state=dummy_state_0,
+        )
+
+
+    def get_initial_state(self):
+        """
+        By default, the policy does not have a state.
+        """
+        return None
+
+    # tf methods
+    @abstractmethod
+    def __call__(
+            self,
+            *,
+            obs,
+            prev_action,
+            prev_reward,
+            state,
+            seq_lens,
+    ) -> Tuple[Any, Any]:
+        """
+        Used by the policy when learning.
+        The inputs are in batch [T, B, ...],
+        except seq_lens that is of shape [B].
+        Should return action logits and values.
+        """
+        raise NotImplementedError("To be implemented by subclasses.")
+
+    @abstractmethod
+    def forward_single_action(
+            self,
+            obs,
+            prev_action,
+            prev_reward,
+            state
+    ):
+        raise NotImplementedError("To be implemented by subclasses.")
+
+    @abstractmethod
+    def forward_single_action_with_extras(
+            self,
+            obs,
+            prev_action,
+            prev_reward,
+            state
+    ):
+        raise NotImplementedError("To be implemented by subclasses.")
+
+
+    @abstractmethod
+    def critic_loss(
+            self,
+            vf_targets
+    ):
+        raise NotImplementedError("To be implemented by subclasses.")
+
+    def get_metrics(self) -> dict:
+        return {}
 
 
 

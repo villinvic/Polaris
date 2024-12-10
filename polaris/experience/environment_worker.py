@@ -11,7 +11,6 @@ from polaris.experience.sampling import SampleBatch
 from polaris.experience.episode import Episode, EpisodeSpectator
 from polaris.environments.polaris_env import PolarisEnv
 from polaris.policies.utils.gae import compute_gae_for_sample_batch
-
 import importlib
 
 
@@ -24,6 +23,7 @@ class EnvWorker:
             worker_id: int,
             config: ConfigDict,
     ):
+
         self.initialised = False
         self.callbacks = config.episode_callback_class(config)
 
@@ -64,7 +64,6 @@ class EnvWorker:
             self.env = PolarisEnv.make(self.config.env, env_index=self.worker_id, **self.config.env_config)
         if not self.initialised:
             self.initialised = True
-            time.sleep(self.worker_id*0.1)
 
         agents_to_policies = {
             aid: self.policy_placeholders[policy_params.policy_type + f"_{aid}"].setup(policy_params)
@@ -96,7 +95,7 @@ class EnvWorker:
 
 
 
-@ray.remote(num_cpus=1, num_gpus=0)
+@ray.remote(num_gpus=0, num_cpus=1)
 class SyncEnvWorker:
 
     def __init__(
@@ -150,7 +149,6 @@ class SyncEnvWorker:
             self.env = PolarisEnv.make(self.config.env, env_index=self.worker_id, **self.config.env_config)
         if not self.initialised:
             self.initialised = True
-            time.sleep(self.worker_id*0.1)
 
         agents_to_policies = {
             aid: self.policy_placeholders[policy_params.policy_type + f"_{aid}"].setup(policy_params)
@@ -213,57 +211,3 @@ class SyncEnvWorker:
             time.sleep(2)
             self.env = PolarisEnv.make(self.config.env, env_index=self.worker_id, **self.config.env_config)
             return self.worker_id, [None]
-
-
-
-if __name__ == '__main__':
-    from polaris.environments.example import DummyEnv
-
-    env = DummyEnv()
-    env.register()
-
-    config = ConfigDict()
-    config.env = env.env_id
-    config.policy_model_path = "polaris.policies.policy"
-    config.policy_model_class = "DummyPolicy"
-    config.policy_config = {}
-    config.trajectory_length = 8
-    config.lock()
-
-    workers = [EnvWorker.remote(worker_id=wid, config=config) for wid in range(1)]
-
-    policy_params = [
-        PolicyParams(name="bobby", policy_type="parametrised"),
-        PolicyParams(name="alexi", policy_type="parametrised"),
-        PolicyParams(name="randi", policy_type="random"),
-    ]
-    jobs = []
-
-    for worker in workers:
-        jobs.append(worker.run_episode_for.remote(
-            {
-                aid: policy_params[np.random.choice(len(policy_params))] for aid in env.get_agent_ids()
-            }
-        ))
-
-    sample_queue = []
-
-    while len(jobs) > 0:
-
-        done_jobs, _ = ray.wait(
-            jobs,
-            # num_returns=1,
-            # timeout=None,
-            # fetch_local=False,
-        )
-        for job in done_jobs:
-            wid, sample_batch = ray.get(next(job))
-            if sample_batch is None:
-                jobs.remove(job)
-                print("we are done")
-            else:
-                sample_queue.extend(sample_batch)
-
-    for batch in sample_queue:
-        print(batch[SampleBatch.POLICY_ID])
-

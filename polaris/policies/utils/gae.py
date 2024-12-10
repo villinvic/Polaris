@@ -45,22 +45,9 @@ def discount_cumsum(x: np.ndarray, gamma: float) -> np.ndarray:
     Returns:
         The sequence containing the discounted cumulative sums
         for each individual reward in `x` till the end of the trajectory.
-
-     .. testcode::
-        :skipif: True
-
-        x = np.array([0.0, 1.0, 2.0, 3.0])
-        gamma = 0.9
-        discount_cumsum(x, gamma)
-
-    .. testoutput::
-
-        array([0.0 + 0.9*1.0 + 0.9^2*2.0 + 0.9^3*3.0,
-               1.0 + 0.9*2.0 + 0.9^2*3.0,
-               2.0 + 0.9*3.0,
-               3.0])
     """
     return scipy.signal.lfilter([1], [1, float(-gamma)], x[::-1], axis=0)[::-1]
+
 
 # from RLlib
 def compute_advantages(
@@ -102,6 +89,7 @@ def compute_advantages(
     )
     return batch
 
+
 def compute_bootstrap_value(sample_batch: SampleBatch, policy: Policy) -> SampleBatch:
     """Performs a value function computation at the end of a trajectory.
     """
@@ -112,25 +100,26 @@ def compute_bootstrap_value(sample_batch: SampleBatch, policy: Policy) -> Sample
     # Trajectory has been truncated -> last r=VF estimate of last obs.
     else:
         if SampleBatch.VALUES not in sample_batch:
-            # attempt to compute the values here
-            values = policy.compute_value(sample_batch)
-            print(values.shape)
+            # attempt to compute the values
+
+            # Could do ** sample_batch maybe here.
+            values = policy.compute_value_batch(
+                obs=sample_batch[SampleBatch.OBS],
+                prev_action=sample_batch[SampleBatch.PREV_ACTION],
+                prev_reward=sample_batch[SampleBatch.PREV_REWARD],
+                state=sample_batch[SampleBatch.STATE],
+                seq_lens=sample_batch[SampleBatch.SEQ_LENS]
+            )
             sample_batch[SampleBatch.VALUES] = values
 
-        # Input dict is provided to us automatically via the Model's
-        # requirements. It's a single-timestep (last one in trajectory)
-        # input_dict.
-        # Create an input dict according to the Policy's requirements.
-        last_r = policy.compute_value({
-            SampleBatch.OBS: tree.map_structure(lambda v: v[-1],
-                                                sample_batch[SampleBatch.NEXT_OBS]),
-            SampleBatch.PREV_ACTION: sample_batch[SampleBatch.ACTION][-1],
-            SampleBatch.PREV_REWARD: sample_batch[SampleBatch.REWARD][-1],
-            # TODO: should correspond to the very last state here
-            SampleBatch.STATE: sample_batch[SampleBatch.NEXT_STATE]
-        })
+        last_r = policy.compute_single_action_with_extras(
+            obs= tree.map_structure(lambda v: v[-1],sample_batch[SampleBatch.NEXT_OBS]),
+            prev_action=sample_batch[SampleBatch.ACTION][-1],
+            prev_reward=sample_batch[SampleBatch.REWARD][-1],
+            state=sample_batch[SampleBatch.NEXT_STATE]
+        )[2][SampleBatch.VALUES]
 
-    sample_batch["bootstrap_value"] = last_r
+    sample_batch[SampleBatch.BOOTSTRAP_VALUE] = last_r
     return sample_batch
 
 
@@ -148,7 +137,7 @@ def compute_gae_for_sample_batch(
 
     batch = compute_advantages(
         batch=sample_batch,
-        last_r=sample_batch["bootstrap_value"],
+        last_r=sample_batch[SampleBatch.BOOTSTRAP_VALUE],
         gamma=policy.policy_config.discount,
         lambda_=policy.policy_config.gae_lambda,
     )

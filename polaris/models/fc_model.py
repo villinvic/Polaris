@@ -11,6 +11,7 @@ from polaris.experience import SampleBatch
 
 class FCModel(BaseModel):
     """
+    TODO: Out-of-date
     We expect users to code their own model.
     This one expects a box as observation and a discrete space for actions
     """

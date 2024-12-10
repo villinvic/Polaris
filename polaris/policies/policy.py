@@ -1,11 +1,12 @@
 import importlib
 import time
 from abc import ABC, abstractmethod
-from typing import NamedTuple, Dict, Type
+from typing import NamedTuple, Dict, Type, Union, Any, Tuple
 
 import numpy as np
 from gymnasium.spaces import Space
 from ml_collections import ConfigDict
+from polaris.models import BaseModel
 
 from polaris.experience import SampleBatch
 
@@ -20,9 +21,21 @@ class Policy(ABC):
             config: ConfigDict,
             options: ConfigDict,
             policy_config: ConfigDict,
-            stats = None,
+            stats: Union[None, dict] = None,
             **kwargs,
     ):
+        """
+        Base policy class.
+
+        :param name: Name of the policy.
+        :param action_space: Action space of the policy.
+        :param observation_space: Observation space of the policy.
+        :param config: Config of the trainer.
+        :param options: Additional options for the policy (usually for the environment, such as a policy type).
+        :param policy_config: Config for the policy (two policies can have different configs).
+        :param stats: Stat records of the policy.
+        """
+
         self.name = name
         self.action_space = action_space
         self.observation_space = observation_space
@@ -33,10 +46,13 @@ class Policy(ABC):
         self.policy_config = policy_config
         self.model_class = getattr(importlib.import_module(self.config.model_path), self.config.model_class)
         self.is_recurrent = self.model_class is not None and self.model_class.is_recurrent
-        self.model = None
+        self.model: Union[None, BaseModel] = None
         self.init_model()
 
     def init_model(self):
+        """
+        Method called at policy instantiation to initialise the model.
+        """
         self.model = self.model_class(
             observation_space=self.observation_space,
             action_space=self.action_space,
@@ -45,26 +61,54 @@ class Policy(ABC):
         self.model.setup()
 
     @abstractmethod
-    def compute_action(
+    def compute_single_action(
             self,
-            input_dict: SampleBatch
-    ):
+            *,
+            obs,
+            prev_action,
+            prev_reward,
+            state,
+    ) -> Tuple[Any, Any]:
         pass
 
     @abstractmethod
-    def compute_value(
+    def compute_single_action_with_extras(
             self,
-            input_dict
-    ):
+            *,
+            obs,
+            prev_action,
+            prev_reward,
+            state,
+    ) -> Tuple[Any, Any, dict]:
+        pass
+
+    @abstractmethod
+    def compute_value_batch(
+            self,
+            *,
+            obs,
+            prev_action,
+            prev_reward,
+            state,
+            seq_lens,
+    ) -> Any:
         pass
 
     def get_initial_state(self):
+        """
+        Returns the state of a policy at episode initialisation.
+        Could be an RNN state, for example.
+        """
         return self.model.get_initial_state()
 
-    def __repr__(self):
-        return f"{self.__class__.__name__}({self.name}, version={self.version})"
+    def setup(
+            self,
+            policy_params: "PolicyParams"
+    ) -> "Policy":
+        """
+        Sets the policy with the specs given in the provided params.
+        """
 
-    def setup(self, policy_params: "PolicyParams"):
         if policy_params.policy_type != self.policy_type:
             raise ValueError(f"Policy type is not the same: {self.get_params()} != {policy_params}")
 
@@ -76,17 +120,20 @@ class Policy(ABC):
         self.stats = policy_params.stats
         return self
 
-    @abstractmethod
-
-    def get_weights(self):
+    def get_weights(self) -> dict:
         return {}
 
     @abstractmethod
-    def set_weights(self, weights: Dict):
+    def set_weights(
+            self,
+            weights: Dict
+    ):
         pass
 
-    def get_params(self):
-
+    def get_params(self) -> "PolicyParams":
+        """
+        Converts the policy into a PolicyParam object.
+        """
         return PolicyParams(
             name=self.name,
             weights=self.get_weights(),
@@ -97,23 +144,20 @@ class Policy(ABC):
             policy_type=self.policy_type
         )
 
-    def train(self, batch: SampleBatch):
+    def train(
+            self,
+            batch: SampleBatch
+    ):
+        """
+        Subclasses should call this super method to update the version of the policy.
+        """
+
         res =  {"delta_version": self.version - np.mean(batch[SampleBatch.VERSION][batch[SampleBatch.VERSION]>0])}
         self.version += 1
         return res
 
-
-class DummyPolicy(Policy):
-    policy_type = "parametrised"
-
-    def compute_action(
-            self,
-            observation,
-            states=None,
-            prev_action=None,
-            prev_reward=None,
-    ):
-        return 0, None
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.name}, version={self.version})"
 
 
 class PolicyParams(NamedTuple):
@@ -126,6 +170,7 @@ class PolicyParams(NamedTuple):
     stats: dict = {}
     version: int = 0
     policy_type: str = "parametrised"
+
 
 class ParamsMap(dict):
     pass

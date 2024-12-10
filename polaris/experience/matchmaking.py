@@ -12,6 +12,10 @@ class MatchMaking(ABC):
             agent_ids,
             **kwargs
     ):
+        """
+        A matchmaking dictates which policies to sample for each new episode.
+        """
+
         self.agent_ids = agent_ids
 
     def next(
@@ -19,6 +23,9 @@ class MatchMaking(ABC):
             params_map: Dict[str, "PolicyParams"],
             **kwargs,
     ) -> Dict[str, "PolicyParams"]:
+        """
+        Returns a matchmaking (dict of AgentID:PolicyParams) based on the provided params map.
+        """
         pass
 
     def update(self, **kwargs):
@@ -42,11 +49,6 @@ class RandomMatchmaking(MatchMaking):
             aid: param_values[pid] for pid, aid in zip(sampled_policies, self.agent_ids)
         }
         return r
-
-
-class Spectator(MatchMaking):
-    pass
-
 
 class TwoPlayerEloRanking(MatchMaking):
 
@@ -90,7 +92,7 @@ class TwoPlayerEloRanking(MatchMaking):
                 self.agent_ids,
                 policy_params[np.random.choice(len(params_map), len(self.agent_ids), replace=False)]
             )
-        }, None
+        }
 
     def expected_outcome(self, delta_elo):
 
@@ -103,8 +105,6 @@ class TwoPlayerEloRanking(MatchMaking):
             pid2: str,
             outcome: float
     ):
-
-
 
         delta_elo = self.elo_scores[pid1] - self.elo_scores[pid2]
 
@@ -133,25 +133,4 @@ class TwoPlayerEloRanking(MatchMaking):
             "elo_lrs": dict(self.lr)
         }
 
-
-
-if __name__ == '__main__':
-
-    r = TwoPlayerEloRanking(
-        agent_ids=[1, 2],
-        policy_params={
-            "bob": PolicyParams(),
-            "jack": PolicyParams()
-        },
-    )
-
-    actual_wr = 0.57
-
-    for t in range(20000):
-
-        outcome = float(np.random.random() < actual_wr)
-        r.update("bob", "jack", outcome=outcome)
-        print(r.expected_outcome(r.elo_scores["bob"] - r.elo_scores["jack"]))
-
-        print(r.metrics())
 

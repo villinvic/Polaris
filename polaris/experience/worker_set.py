@@ -9,11 +9,16 @@ from .episode import EpisodeMetrics
 from .sampling import SampleBatch
 
 
-class WorkerSet:
+class AsyncWorkerSet:
     def __init__(
             self,
             config: ConfigDict,
     ):
+        """
+        TODO: out-of-date
+        Workers do not update model weights mid episode.
+        """
+
         self.workers = {
             wid: EnvWorker.remote(
                 worker_id=wid,
@@ -69,6 +74,11 @@ class SyncWorkerSet:
             config: ConfigDict,
             with_spectator=False,
     ):
+        """
+        Synchronous set of environment workers.
+        The set of workers update their model weights each time they communicate with the main process.
+        """
+
         self.workers = {
             wid: SyncEnvWorker.remote(
                 worker_id=wid,
@@ -88,7 +98,7 @@ class SyncWorkerSet:
 
         self.running_jobs = {}
 
-    def get_num_worker_available(self):
+    def get_num_worker_available(self) -> int:
         return len(self.available_workers)
 
     def push_jobs(
@@ -96,7 +106,11 @@ class SyncWorkerSet:
             params_map: Dict[str, PolicyParams],
             jobs: List[Dict[str, PolicyParams]],
             push_back=False
-    ):
+    ) -> List:
+        """
+        Push jobs to available environment workers.
+        """
+
         job_refs = []
 
         if not push_back and self.waiting:
@@ -126,15 +140,22 @@ class SyncWorkerSet:
 
         return job_refs
 
-
-    def wait(self, params_map, job_refs) -> List[Union[SampleBatch,EpisodeMetrics]]:
+    def wait(
+            self,
+            params_map,
+            job_refs,
+            timeout=1e-2
+    ) -> List[Union[SampleBatch,EpisodeMetrics]]:
+        """
+        Blocks timeout seconds before receiving samples from workers.
+        """
 
         returns = []
         ready_jobs, njob_refs = ray.wait(
             job_refs,
             num_returns=len(job_refs),
-            timeout=1e-2,
-            fetch_local=False,
+            timeout=timeout,
+            fetch_local=True,
         )
 
         job_refs = njob_refs
@@ -167,17 +188,6 @@ class SyncWorkerSet:
                     returns.append(ret)
 
         return returns, job_refs
-
-        # if self.batch_count < self.num_workers*2: # TODO: make this flexible with the number of players.......
-        #     self.waiting = True
-        #     return [], job_refs
-        # else:
-        #     self.waiting = False
-        #     batches = self.databag.copy()
-        #     self.databag = []
-        #     self.batch_count = 0
-        #     return batches, job_refs
-
 
 
 

@@ -16,6 +16,7 @@ from .utils.categorical_distribution import CategoricalDistribution
 
 class LSTMModel(BaseModel):
     """
+    TODO: Out-of-date
     We expect users to code their own model.
     This one expects a box as observation and a discrete space for actions
     """

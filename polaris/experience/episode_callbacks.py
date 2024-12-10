@@ -39,4 +39,7 @@ class EpisodeCallbacks:
         env_metrics: Dict,
         metrics: Dict,
     ):
+        """
+        :param metrics: should be edited to report custom metrics
+        """
         pass

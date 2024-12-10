@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='polaris',
-    version='0.2.0',
+    version='0.5.0',
     description='Reinforcement Learning library based on sonnet and ray tune.',
     author='Victor Villin',
     author_email='victor.villin@unine.ch',
@@ -12,10 +12,11 @@ setup(
     "ray==2.9.0",
     "ray[tune]",
     "gymnasium>=0.27.1",
-    "tensorflow>=2.12.0",
+    "tensorflow==2.12.1",
     "tensorflow_probability==0.20.0",
     "dm-sonnet==2.0.2",
     "ml_collections",
     "sacred",
+    "wandb",
     ]
 )
