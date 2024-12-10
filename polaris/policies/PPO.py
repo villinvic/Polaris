@@ -95,6 +95,7 @@ class PPO(ParametrisedPolicy):
             metrics = self._train(
                 **minibatch
             )
+            print(metrics)
 
         last_kl = metrics["kl"]
         kl_coeff_val = self.kl_coeff.value()
@@ -202,6 +203,7 @@ class PPO(ParametrisedPolicy):
             "kl": mean_kl,
             "kl_loss": kl_loss,
             "kl_coeff": self.kl_coeff,
+            "logp_ratio": tf.reduce_mean(tf.boolean_mask(logp_ratio, mask))
         }
 
         train_metrics.update(self.model.get_metrics())
