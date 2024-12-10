@@ -119,6 +119,14 @@ def compute_bootstrap_value(sample_batch: SampleBatch, policy: Policy) -> Sample
             state=sample_batch[SampleBatch.NEXT_STATE]
         )[2][SampleBatch.VALUES]
 
+        last_2r = policy.compute_single_action_with_extras(
+            obs= tree.map_structure(lambda v: v[-2],sample_batch[SampleBatch.NEXT_OBS]),
+            prev_action=sample_batch[SampleBatch.ACTION][-2],
+            prev_reward=sample_batch[SampleBatch.REWARD][-2],
+            state=sample_batch[SampleBatch.NEXT_STATE]
+        )[2][SampleBatch.VALUES]
+        print(sample_batch[SampleBatch.VALUES][-1], last_2r, sample_batch[SampleBatch.VALUES][-1] == last_2r)
+
     sample_batch[SampleBatch.BOOTSTRAP_VALUE] = last_r
     return sample_batch
 
