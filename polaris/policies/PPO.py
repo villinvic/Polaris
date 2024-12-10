@@ -101,12 +101,6 @@ class PPO(ParametrisedPolicy):
             del metrics["x"]
             del metrics["y"]
 
-            print(di["x"], di["y"])
-            if np.any(np.isnan(list(di.values()))):
-                print(minibatch[SampleBatch.ADVANTAGES])
-                print(minibatch[SampleBatch.VF_TARGETS])
-                exit()
-
 
         last_kl = metrics["kl"]
         kl_coeff_val = self.kl_coeff.value()
