@@ -95,13 +95,6 @@ class PPO(ParametrisedPolicy):
             metrics = self._train(
                 **minibatch
             )
-            di = {
-                m: v.numpy() for m,v  in metrics.items()
-            }
-            del metrics["x"]
-            del metrics["y"]
-
-            print(di["x"][:, 0], di["y"][:, 0])
 
 
         last_kl = metrics["kl"]
