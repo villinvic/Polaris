@@ -101,6 +101,8 @@ class PPO(ParametrisedPolicy):
             del metrics["x"]
             del metrics["y"]
 
+            print(di["x"], di["y"])
+
 
         last_kl = metrics["kl"]
         kl_coeff_val = self.kl_coeff.value()
