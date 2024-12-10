@@ -98,7 +98,7 @@ class PPO(ParametrisedPolicy):
             di = {
                 m: v.numpy() for m,v  in metrics.items()
             }
-            print(di)
+            print(minibatch[SampleBatch.SEQ_LENS])
             if np.any(np.isnan(list(di.values()))):
                 print(minibatch[SampleBatch.ADVANTAGES])
                 print(minibatch[SampleBatch.VF_TARGETS])
