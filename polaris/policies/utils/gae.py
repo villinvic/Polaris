@@ -83,8 +83,8 @@ def compute_advantages(
     # "Generalized Advantage Estimation": https://arxiv.org/abs/1506.02438
     batch[SampleBatch.ADVANTAGES] = discount_cumsum(delta_t, gamma * lambda_)
     batch[SampleBatch.VF_TARGETS] = (
-        batch[SampleBatch.ADVANTAGES] + vf_preds
-    ).astype(np.float32) * next_not_dones
+        (batch[SampleBatch.ADVANTAGES] + vf_preds) * next_not_dones
+    ).astype(np.float32)
 
     batch[SampleBatch.ADVANTAGES] = batch[SampleBatch.ADVANTAGES].astype(
         np.float32
