@@ -98,8 +98,8 @@ class PPO(ParametrisedPolicy):
             di = {
                 m: v.numpy() for m,v  in metrics.items()
             }
-            del metrics["x"]
-            del metrics["y"]
+            del metrics["x"][:, 0]
+            del metrics["y"][:, 0]
 
             print(di["x"], di["y"])
 
