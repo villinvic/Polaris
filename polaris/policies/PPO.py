@@ -95,9 +95,12 @@ class PPO(ParametrisedPolicy):
             metrics = self._train(
                 **minibatch
             )
-            print({
+            di = {
                 m: v.numpy() for m,v  in metrics.items()
-            })
+            }
+            print(di)
+            if np.any(np.isnan(list(di.values()))):
+                exit()
 
         last_kl = metrics["kl"]
         kl_coeff_val = self.kl_coeff.value()
