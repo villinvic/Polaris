@@ -128,7 +128,6 @@ class PPO(ParametrisedPolicy):
             advantages,
             vf_targets,
     ):
-        print(vf_targets)
         """
         If an auxiliary loss is required,
         subclass the PPO class. The parameters of the _train function may not be enough.
@@ -144,12 +143,12 @@ class PPO(ParametrisedPolicy):
                     seq_lens=seq_lens
                 )
                 mask = tf.transpose(tf.sequence_mask(seq_lens, maxlen=self.config.max_seq_len), [1, 0])
-                action_dist = self.model.action_dist(curr_action_logits)
-                curr_action_logp = action_dist.logp(action)
-                behavior_dist = self.model.action_dist(action_logits)
-                entropy = tf.boolean_mask(action_dist.entropy(), mask)
+                curr_action_dist = self.model.action_dist(curr_action_logits)
+                curr_action_logp = curr_action_dist.logp(action)
+                prev_action_dist = self.model.action_dist(action_logits)
+                entropy = tf.boolean_mask(curr_action_dist.entropy(), mask)
 
-                logp_ratio = tf.exp(curr_action_logp - action_logp)
+                logp_ratio = tf.exp(tf.stop_gradient(curr_action_logp) - action_logp)
 
                 surrogate_loss = tf.minimum(
                     advantages * logp_ratio,
@@ -163,7 +162,7 @@ class PPO(ParametrisedPolicy):
 
                 policy_loss = -tf.reduce_mean(tf.boolean_mask(surrogate_loss, mask))
 
-                critic_loss = tf.math.square(vf_preds - vf_targets)  #self.model.critic_loss(vf_targets)
+                critic_loss = self.model.critic_loss(vf_targets)
                 critic_loss_clipped = tf.clip_by_value(
                     critic_loss,
                     0,
