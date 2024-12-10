@@ -98,10 +98,10 @@ class PPO(ParametrisedPolicy):
             di = {
                 m: v.numpy() for m,v  in metrics.items()
             }
-            del metrics["x"][:, 0]
-            del metrics["y"][:, 0]
+            del metrics["x"]
+            del metrics["y"]
 
-            print(di["x"], di["y"])
+            print(di["x"][:, 0], di["y"][:, 0])
 
 
         last_kl = metrics["kl"]
