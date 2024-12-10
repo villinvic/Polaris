@@ -102,6 +102,7 @@ class PPO(ParametrisedPolicy):
             if np.any(np.isnan(list(di.values()))):
                 print(minibatch[SampleBatch.ADVANTAGES])
                 print(minibatch[SampleBatch.VF_TARGETS])
+
                 exit()
 
         last_kl = metrics["kl"]
@@ -169,7 +170,7 @@ class PPO(ParametrisedPolicy):
                     ),
                 )
 
-                policy_loss = -tf.reduce_mean(tf.boolean_mask(surrogate_loss, mask)) * 0.
+                policy_loss = -tf.reduce_mean(tf.boolean_mask(surrogate_loss, mask))
 
                 critic_loss = self.model.critic_loss(vf_targets)
                 critic_loss_clipped = tf.clip_by_value(
