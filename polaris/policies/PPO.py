@@ -158,9 +158,7 @@ class PPO(ParametrisedPolicy):
                 prev_action_dist = self.model.action_dist(action_logits)
                 entropy = tf.boolean_mask(curr_action_dist.entropy(), mask)
 
-                logp_ratio = tf.exp(tf.stop_gradient(curr_action_logp) - action_logp)
-
-                print(curr_action_logp.shape, action_logp.shape, logp_ratio.shape, advantages.shape)
+                logp_ratio = tf.exp(curr_action_logp - action_logp)
 
                 surrogate_loss = tf.minimum(
                     advantages * logp_ratio,
@@ -191,7 +189,7 @@ class PPO(ParametrisedPolicy):
                 else:
                     mean_kl = 0.
                     kl_loss = tf.constant(0.0)
-                total_loss = (critic_loss + policy_loss - mean_entropy * self.policy_config.entropy_cost + kl_loss)
+                total_loss = (critic_loss * 0. + policy_loss - mean_entropy * self.policy_config.entropy_cost + kl_loss)
 
         gradients = tape.gradient(total_loss, self.model.trainable_variables)
         gradients, mean_grad_norm = tf.clip_by_global_norm(gradients, self.policy_config.grad_clip)
