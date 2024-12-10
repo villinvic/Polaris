@@ -33,7 +33,7 @@ class AsyncTrainer(Checkpointable):
 
 
         self.config = config
-        self.worker_set = WorkerSet(
+        self.worker_set = AsyncWorkerSet(
             config
         )
 

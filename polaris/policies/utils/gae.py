@@ -142,8 +142,6 @@ def compute_gae_for_sample_batch(
         lambda_=policy.policy_config.gae_lambda,
     )
 
-    print(batch[SampleBatch.ADVANTAGES])
-
     #if batch[SampleBatch.DONE][-1]:
     #    print(batch[SampleBatch.ADVANTAGES])
 
