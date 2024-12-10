@@ -179,7 +179,7 @@ class PPO(ParametrisedPolicy):
                     self.policy_config.vf_clip,
                 )
                 critic_loss = self.policy_config.baseline_coeff * tf.reduce_mean(tf.boolean_mask(critic_loss_clipped, mask))
-                mean_entropy = -tf.reduce_mean(entropy)
+                mean_entropy = tf.reduce_mean(entropy)
 
                 if self.policy_config.initial_kl_coeff > 0.0:
                     kl_behavior_to_online = tf.boolean_mask(prev_action_dist.kl(curr_action_logits), mask)
@@ -189,7 +189,7 @@ class PPO(ParametrisedPolicy):
                 else:
                     mean_kl = 0.
                     kl_loss = tf.constant(0.0)
-                total_loss = (critic_loss + policy_loss - mean_entropy * self.policy_config.entropy_cost + kl_loss)
+                total_loss = (critic_loss + policy_loss - mean_entropy * self.policy_config.entropy_cost + kl_loss) * 0.
 
         gradients = tape.gradient(total_loss, self.model.trainable_variables)
         gradients, mean_grad_norm = tf.clip_by_global_norm(gradients, self.policy_config.grad_clip)
