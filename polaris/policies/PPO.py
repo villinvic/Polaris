@@ -90,7 +90,7 @@ class PPO(ParametrisedPolicy):
                                     n_epochs=self.config.n_epochs,
                                     minibatch_size=self.config.minibatch_size
                                     ):
-            print(minibatch["obs"], minibatch["vf_targets"])
+            print(minibatch["obs"][:, 0], minibatch["vf_targets"][:, 0])
             metrics = self._train(
                 **minibatch
             )
@@ -128,6 +128,7 @@ class PPO(ParametrisedPolicy):
             advantages,
             vf_targets,
     ):
+        print(vf_targets)
         """
         If an auxiliary loss is required,
         subclass the PPO class. The parameters of the _train function may not be enough.
