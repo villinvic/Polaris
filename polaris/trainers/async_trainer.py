@@ -11,7 +11,7 @@ from ml_collections import ConfigDict
 
 from polaris.checkpointing.checkpointable import Checkpointable
 from polaris.experience.episode import EpisodeMetrics, NamedPolicyMetrics
-from polaris.experience.worker_set import WorkerSet
+from polaris.experience.worker_set import AsyncWorkerSet
 from polaris.environments.polaris_env import PolarisEnv
 from polaris.policies.policy import Policy, PolicyParams, ParamsMap
 from polaris.experience.matchmaking import RandomMatchmaking
