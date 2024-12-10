@@ -100,6 +100,8 @@ class PPO(ParametrisedPolicy):
             }
             print(di)
             if np.any(np.isnan(list(di.values()))):
+                print(minibatch[SampleBatch.ADVANTAGES])
+                print(minibatch[SampleBatch.VF_TARGETS])
                 exit()
 
         last_kl = metrics["kl"]
