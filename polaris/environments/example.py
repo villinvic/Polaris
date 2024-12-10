@@ -3,8 +3,6 @@ from typing import Optional
 import numpy as np
 import tree
 from gymnasium.envs.classic_control import CartPoleEnv
-from gymnasium.envs.box2d import LunarLander
-
 from polaris.policies.random import RandomPolicy
 from .polaris_env import PolarisEnv
 from ray.tune.registry import ENV_CREATOR, _global_registry
@@ -91,45 +89,45 @@ class PolarisCartPole(CartPoleEnv, PolarisEnv):
         return d
 
 
-class PolarisLunarLander(LunarLander, PolarisEnv):
-
-    env_id = "lunarlander"
-
-    def __init__(self, *args, env_index=None, **config):
-        PolarisEnv.__init__(self, env_index=env_index, **config)
-        LunarLander.__init__(self, *args, **config)
-
-        self._agent_ids = {0}
-        self.t = 0
-        self.max_t = 8192*2
-
-    def reset(
-        self,
-        *,
-        seed: Optional[int] = None,
-        options: Optional[dict] = None,
-    ):
-        # makes a call to step
-        self.t = 0
-        return super().reset(seed=seed, options=options)
-
-
-
-    def step(self, action):
-        if isinstance(action, int):
-            action = {0: action}
-
-        d = tree.map_structure(lambda v: {
-            0: v
-        }, super().step(action[0]))
-
-        self.t += 1
-        timeout = self.t >= self.max_t
-        d[2][0] = d[2][0] or timeout
-        d[2]["__all__"] = d[2][0]
-        d[3]["__all__"] = False
-        d[1][0] = d[1][0] #* 0.01
-
-
-        return d
+# class PolarisLunarLander(LunarLander, PolarisEnv):
+#
+#     env_id = "lunarlander"
+#
+#     def __init__(self, *args, env_index=None, **config):
+#         PolarisEnv.__init__(self, env_index=env_index, **config)
+#         LunarLander.__init__(self, *args, **config)
+#
+#         self._agent_ids = {0}
+#         self.t = 0
+#         self.max_t = 8192*2
+#
+#     def reset(
+#         self,
+#         *,
+#         seed: Optional[int] = None,
+#         options: Optional[dict] = None,
+#     ):
+#         # makes a call to step
+#         self.t = 0
+#         return super().reset(seed=seed, options=options)
+#
+#
+#
+#     def step(self, action):
+#         if isinstance(action, int):
+#             action = {0: action}
+#
+#         d = tree.map_structure(lambda v: {
+#             0: v
+#         }, super().step(action[0]))
+#
+#         self.t += 1
+#         timeout = self.t >= self.max_t
+#         d[2][0] = d[2][0] or timeout
+#         d[2]["__all__"] = d[2][0]
+#         d[3]["__all__"] = False
+#         d[1][0] = d[1][0] #* 0.01
+#
+#
+#         return d
 
