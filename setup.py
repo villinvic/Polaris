@@ -18,5 +18,6 @@ setup(
     "ml_collections",
     "sacred",
     "wandb",
+    "scipy",
     ]
 )
