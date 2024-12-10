@@ -90,7 +90,7 @@ class PPO(ParametrisedPolicy):
                                     n_epochs=self.config.n_epochs,
                                     minibatch_size=self.config.minibatch_size
                                     ):
-
+            print(minibatch["obs"], minibatch["vf_targets"])
             metrics = self._train(
                 **minibatch
             )
