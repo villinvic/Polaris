@@ -98,12 +98,12 @@ class PPO(ParametrisedPolicy):
             di = {
                 m: v.numpy() for m,v  in metrics.items()
             }
-            print(minibatch[SampleBatch.SEQ_LENS])
+            print(di)
             if np.any(np.isnan(list(di.values()))):
                 print(minibatch[SampleBatch.ADVANTAGES])
                 print(minibatch[SampleBatch.VF_TARGETS])
-
                 exit()
+
 
         last_kl = metrics["kl"]
         kl_coeff_val = self.kl_coeff.value()
@@ -159,6 +159,8 @@ class PPO(ParametrisedPolicy):
                 entropy = tf.boolean_mask(curr_action_dist.entropy(), mask)
 
                 logp_ratio = tf.exp(tf.stop_gradient(curr_action_logp) - action_logp)
+
+                print(curr_action_logp.shape, action_logp.shape, logp_ratio.shape, advantages.shape)
 
                 surrogate_loss = tf.minimum(
                     advantages * logp_ratio,
