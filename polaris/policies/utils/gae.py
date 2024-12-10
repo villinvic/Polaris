@@ -82,7 +82,7 @@ def compute_advantages(
     batch[SampleBatch.ADVANTAGES] = discount_cumsum(delta_t, gamma * lambda_)
     batch[SampleBatch.VF_TARGETS] = (
         batch[SampleBatch.ADVANTAGES] + vf_preds
-    ).astype(np.float32)
+    ).astype(np.float32) * not_dones
 
     batch[SampleBatch.ADVANTAGES] = batch[SampleBatch.ADVANTAGES].astype(
         np.float32
