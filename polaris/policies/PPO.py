@@ -98,7 +98,7 @@ class PPO(ParametrisedPolicy):
             di = {
                 m: v.numpy() for m,v  in metrics.items()
             }
-            print(di)
+            print(di["x"], di["y"])
             if np.any(np.isnan(list(di.values()))):
                 print(minibatch[SampleBatch.ADVANTAGES])
                 print(minibatch[SampleBatch.VF_TARGETS])
@@ -196,7 +196,6 @@ class PPO(ParametrisedPolicy):
 
         self.model.optimiser.apply(gradients, self.model.trainable_variables)
 
-        mean_entropy = tf.reduce_mean(entropy)
         explained_vf = explained_variance(
             tf.boolean_mask(vf_targets, mask),
             tf.boolean_mask(vf_preds, mask)
@@ -211,7 +210,10 @@ class PPO(ParametrisedPolicy):
             "kl": mean_kl,
             "kl_loss": kl_loss,
             "kl_coeff": self.kl_coeff,
-            "logp_ratio": tf.reduce_mean(tf.boolean_mask(logp_ratio, mask))
+            "logp_ratio": tf.reduce_mean(tf.boolean_mask(logp_ratio, mask)),
+            "x": tf.boolean_mask(vf_targets, mask),
+            "y": tf.boolean_mask(vf_preds, mask)
+
         }
 
         train_metrics.update(self.model.get_metrics())
