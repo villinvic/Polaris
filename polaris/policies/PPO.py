@@ -24,7 +24,11 @@ class PPO(ParametrisedPolicy):
             SampleBatch.ACTION_LOGITS,
             SampleBatch.ACTION_LOGP,
             SampleBatch.ADVANTAGES,
-            SampleBatch.VF_TARGETS]
+            SampleBatch.VF_TARGETS,
+
+            SampleBatch.DONE,
+            SampleBatch.REWARD
+                   ]
 
     def __init__(
             self,
@@ -90,7 +94,12 @@ class PPO(ParametrisedPolicy):
                                     n_epochs=self.config.n_epochs,
                                     minibatch_size=self.config.minibatch_size
                                     ):
-            print(minibatch["obs"][:, 0], minibatch["vf_targets"][:, 0])
+
+            print(minibatch[SampleBatch.REWARD][:, 0],
+             minibatch[SampleBatch.DONE][:, 0], minibatch[SampleBatch.VF_TARGETS][:, 0])
+
+            del minibatch[SampleBatch.REWARD]
+            del minibatch[SampleBatch.DONE]
             metrics = self._train(
                 **minibatch
             )
