@@ -98,6 +98,9 @@ class PPO(ParametrisedPolicy):
             di = {
                 m: v.numpy() for m,v  in metrics.items()
             }
+            del metrics["x"]
+            del metrics["y"]
+
             print(di["x"], di["y"])
             if np.any(np.isnan(list(di.values()))):
                 print(minibatch[SampleBatch.ADVANTAGES])
