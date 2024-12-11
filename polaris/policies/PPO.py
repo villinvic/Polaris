@@ -203,9 +203,6 @@ class PPO(ParametrisedPolicy):
             "kl_loss": kl_loss,
             "kl_coeff": self.kl_coeff,
             "logp_ratio": tf.reduce_mean(tf.boolean_mask(logp_ratio, mask)),
-            "x": vf_targets,
-            "y": vf_preds
-
         }
 
         train_metrics.update(self.model.get_metrics())

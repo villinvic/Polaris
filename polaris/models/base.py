@@ -53,7 +53,7 @@ class BaseModel(snt.Module):
         )
         return action.numpy(), state
 
-    @tf.function(jit_compile=True)
+    @tf.function(jit_compile=False)
     def _compute_single_action(
             self,
             obs,
@@ -94,7 +94,7 @@ class BaseModel(snt.Module):
         extras["compute_single_action_with_extras_ms"] = time.time() - t
         return action.numpy(), tree.map_structure(lambda v: v.numpy(), state), extras
 
-    @tf.function(jit_compile=True)
+    @tf.function(jit_compile=False)
     def _compute_single_action_with_extras(
             self,
             obs,
@@ -131,12 +131,15 @@ class BaseModel(snt.Module):
         T = 5
         B = 3
 
-        x = self.observation_space.sample()
+        x = tree.map_structure(
+            lambda v: 1. if not isinstance(v, np.ndarray) else np.ones_like(v),
+            self.observation_space.sample()
+        )
         dummy_obs = tree.map_structure(
-            lambda v: np.zeros_like(v, shape=(T, B) + v.shape),
+            lambda v: np.ones_like(v, shape=(T, B) + v.shape),
             x
         )
-        dummy_reward = np.zeros((T, B), dtype=np.float32)
+        dummy_reward = np.ones((T, B), dtype=np.float32)
         dummy_action = np.zeros((T, B), dtype=np.int32)
 
         dummy_state_0 = self.get_initial_state()
@@ -146,7 +149,7 @@ class BaseModel(snt.Module):
         )
         seq_lens = np.ones((B,), dtype=np.int32) * T
 
-        self(
+        batch_logits, batch_values = self(
             obs=dummy_obs,
             prev_action=dummy_action,
             prev_reward=dummy_reward,
@@ -154,18 +157,28 @@ class BaseModel(snt.Module):
             seq_lens=seq_lens
         )
 
-        self.compute_single_action(
+        _, _ = self.compute_single_action(
             obs=x,
             prev_action=dummy_action[0, 0],
             prev_reward=dummy_reward[0, 0],
             state=dummy_state_0,
         )
-        self.compute_single_action_with_extras(
+        _, _, extras = self.compute_single_action_with_extras(
             obs=x,
             prev_action=dummy_action[0, 0],
             prev_reward=dummy_reward[0, 0],
             state=dummy_state_0,
         )
+        logits = extras[SampleBatch.ACTION_LOGITS]
+        value = extras[SampleBatch.VALUES]
+
+        batch_logits = batch_logits.numpy()
+        batch_values = batch_values.numpy()
+
+        assert np.isclose(batch_values[0, 0], value, atol=1e-3), \
+            f"Batch and sample computation do not match on values: {(batch_values[0, 0], value)}"
+        assert np.allclose(batch_logits[0, 0], logits, atol=1e-3), \
+            f"Batch and sample computation do not match on logits: {(batch_logits[0, 0], logits)}"
 
 
     def get_initial_state(self):
