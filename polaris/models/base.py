@@ -44,7 +44,9 @@ class BaseModel(snt.Module):
         """
         This is supposed to be only used when computing actions in spectator workers.
         """
-
+        obs = tf.expand_dims(obs, axis=0)
+        prev_action = tf.expand_dims(prev_action, axis=0)
+        prev_reward = tf.expand_dims(prev_reward, axis=0)
         action, state = self._compute_single_action(
             obs,
             prev_action,

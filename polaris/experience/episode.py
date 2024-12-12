@@ -87,12 +87,24 @@ class Episode:
 
         while not dones["__all__"]:
             for aid, policy in self.agents_to_policies.items():
-                actions[aid], next_states[aid], extras[aid] = policy.compute_single_action_with_extras(
+                # TODO: VICTOR: memory leak here
+                # check more retracing ?
+                actions[aid], next_states[aid] = policy.compute_single_action(
                     obs=observations[aid],
                     prev_action=prev_actions[aid],
                     prev_reward=prev_rewards[aid],
                     state=states[aid]
                 )
+                actions[aid] = np.int32(self.env.action_space.sample())
+                next_states[aid] = states[aid]
+                extras[aid] = {
+                    SampleBatch.ACTION_LOGITS: np.array([0., 0.], dtype=np.float32),
+                    SampleBatch.VALUES: np.float32(0.),
+                    SampleBatch.ACTION_LOGP: np.float32(-0.693147181),
+
+                }
+
+
 
             try:
                 next_observations, rewards, dones, truncs, infos = self.env.step(actions)

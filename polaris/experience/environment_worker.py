@@ -1,5 +1,7 @@
 from typing import Dict, Generator
 import time
+
+import memray
 import numpy as np
 from ml_collections import ConfigDict
 import ray
@@ -23,7 +25,6 @@ class EnvWorker:
             worker_id: int,
             config: ConfigDict,
     ):
-
         self.initialised = False
         self.callbacks = config.episode_callback_class(config)
 
