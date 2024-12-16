@@ -1,8 +1,6 @@
 from typing import Dict, Generator
 import time
 
-import memray
-import numpy as np
 from ml_collections import ConfigDict
 import ray
 import copy

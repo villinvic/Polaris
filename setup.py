@@ -8,16 +8,20 @@ setup(
     author_email='victor.villin@unine.ch',
     packages=find_packages(exclude=('tests', 'docs')),
     install_requires=[
+    "numpy==2.0.2",
     "dm_tree",
     "ray==2.9.0",
     "ray[tune]",
-    "gymnasium>=0.27.1",
-    "tensorflow==2.12.1",
-    "tensorflow_probability==0.20.0",
+    "gymnasium=1.0.0",
+    "tensorflow==2.18.1",
+    "tensorflow[and-cuda]",
+    "tf_keras==2.18.0",
+    "tensorflow-probability==0.24.0",
     "dm-sonnet==2.0.2",
     "ml_collections",
     "sacred",
     "wandb",
+    "plotly",
     "scipy",
     ]
 )

@@ -10,6 +10,7 @@ import tensorflow as tf
 from tensorflow.keras.optimizers import Optimizer
 import time
 
+from polaris.experience.episode import batchify_input
 from polaris.experience import SampleBatch
 
 
@@ -44,9 +45,6 @@ class BaseModel(snt.Module):
         """
         This is supposed to be only used when computing actions in spectator workers.
         """
-        obs = tf.expand_dims(obs, axis=0)
-        prev_action = tf.expand_dims(prev_action, axis=0)
-        prev_reward = tf.expand_dims(prev_reward, axis=0)
         action, state = self._compute_single_action(
             obs,
             prev_action,
@@ -159,17 +157,18 @@ class BaseModel(snt.Module):
             seq_lens=seq_lens
         )
 
-        _, _ = self.compute_single_action(
+        inputs = batchify_input(
             obs=x,
-            prev_action=dummy_action[0, 0],
-            prev_reward=dummy_reward[0, 0],
+            prev_action=dummy_action[0, :1],
+            prev_reward=dummy_reward[0, :1],
             state=dummy_state_0,
         )
+
+        _, _ = self.compute_single_action(
+            **inputs
+        )
         _, _, extras = self.compute_single_action_with_extras(
-            obs=x,
-            prev_action=dummy_action[0, 0],
-            prev_reward=dummy_reward[0, 0],
-            state=dummy_state_0,
+            **inputs
         )
         logits = extras[SampleBatch.ACTION_LOGITS]
         value = extras[SampleBatch.VALUES]

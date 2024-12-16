@@ -2,6 +2,8 @@ import numpy as np
 import scipy
 import tensorflow as tf
 import tree
+
+from polaris.experience.episode import batchify_input
 from polaris.experience import SampleBatch
 from polaris.experience.sampling import concat_sample_batches
 from polaris.policies import Policy
@@ -106,19 +108,23 @@ def compute_bootstrap_value(sample_batch: SampleBatch, policy: Policy) -> Sample
 
             # Could do ** sample_batch maybe here.
             values = policy.compute_value_batch(
+                **batchify_input(
                 obs=sample_batch[SampleBatch.OBS],
                 prev_action=sample_batch[SampleBatch.PREV_ACTION],
                 prev_reward=sample_batch[SampleBatch.PREV_REWARD],
                 state=sample_batch[SampleBatch.STATE],
                 seq_lens=sample_batch[SampleBatch.SEQ_LENS]
+                )
             )
             sample_batch[SampleBatch.VALUES] = values
 
         last_r = policy.compute_single_action_with_extras(
+            **batchify_input(
             obs= tree.map_structure(lambda v: v[-1],sample_batch[SampleBatch.NEXT_OBS]),
             prev_action=sample_batch[SampleBatch.ACTION][-1],
             prev_reward=sample_batch[SampleBatch.REWARD][-1],
             state=sample_batch[SampleBatch.NEXT_STATE]
+            )
         )[2][SampleBatch.VALUES]
 
     sample_batch[SampleBatch.BOOTSTRAP_VALUE] = last_r

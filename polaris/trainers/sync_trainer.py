@@ -217,10 +217,11 @@ class SynchronousTrainer(Checkpointable):
                 self.metricbank.update(tree.flatten_with_path(metrics), prefix=f"experience/",
                                        smoothing=self.config.episode_metrics_smoothing)
 
+        ram_info = psutil.virtual_memory()
         misc_metrics =  [
                     (f'{pi}_queue_length', queue.size())
                     for pi, queue in self.experience_queue.items()
-                ]
+                ] + [('RAM_percent_usage', ram_info.percent)]
         if frames > 0:
             misc_metrics.append(("FPS", frames / prev_frames_dt))
         if enqueue_time_ms is not None:

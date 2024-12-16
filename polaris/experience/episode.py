@@ -2,7 +2,6 @@ import time
 import copy
 from collections import defaultdict
 from typing import Iterator, List, NamedTuple, Dict
-
 import numpy as np
 import tree
 from ml_collections import ConfigDict
@@ -33,6 +32,22 @@ class EpisodeMetrics(NamedTuple):
     matchmaking_wait_ms: np.float32 = 100.
     custom_metrics: dict = {}
     policy_metrics: Dict[str, PolicyMetrics] = {}
+
+
+# Put function into policy object
+def add_batch_dim(p,x):
+    if p[0] in (SampleBatch.STATE, SampleBatch.SEQ_LENS):
+        return x
+    return [x]
+
+def batchify_input(**inputs):
+    return tree.map_structure_with_path(
+        lambda p, x: add_batch_dim(p, x),
+        inputs
+    )
+
+
+
 
 
 class Episode:
@@ -89,21 +104,15 @@ class Episode:
             for aid, policy in self.agents_to_policies.items():
                 # TODO: VICTOR: memory leak here
                 # check more retracing ?
-                actions[aid], next_states[aid] = policy.compute_single_action(
-                    obs=observations[aid],
-                    prev_action=prev_actions[aid],
-                    prev_reward=prev_rewards[aid],
-                    state=states[aid]
+                actions[aid], next_states[aid], extras[aid] = policy.compute_single_action_with_extras(
+                    **batchify_input(
+                        obs=observations[aid],
+                        prev_action=prev_actions[aid],
+                        prev_reward=prev_rewards[aid],
+                        state=states[aid]
+
+                    )
                 )
-                actions[aid] = np.int32(self.env.action_space.sample())
-                next_states[aid] = states[aid]
-                extras[aid] = {
-                    SampleBatch.ACTION_LOGITS: np.array([0., 0.], dtype=np.float32),
-                    SampleBatch.VALUES: np.float32(0.),
-                    SampleBatch.ACTION_LOGP: np.float32(-0.693147181),
-
-                }
-
 
 
             try:
@@ -235,10 +244,13 @@ class EpisodeSpectator(Episode):
             for aid, policy in self.agents_to_policies.items():
 
                 actions[aid], states[aid] = policy.compute_single_action(
-                    obs=observations[aid],
-                    prev_action=actions[aid],
-                    prev_reward=rewards[aid],
-                    state=states[aid]
+                    **batchify_input(
+                        obs=observations[aid],
+                        prev_action=actions[aid],
+                        prev_reward=rewards[aid],
+                        state=states[aid]
+
+                    )
                 )
 
             try:

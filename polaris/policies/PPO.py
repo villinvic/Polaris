@@ -35,7 +35,6 @@ class PPO(ParametrisedPolicy):
             options=None,
             **kwargs
     ):
-
         self.kl_coeff = tf.Variable(
             policy_config.initial_kl_coeff,
             trainable=False,
