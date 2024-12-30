@@ -1,6 +1,9 @@
 import time
 from typing import Dict
 
+import tree
+from pyximport import pyximport
+
 from polaris.policies.utils.batch_processing import make_time_major
 from .parametrised import ParametrisedPolicy
 from polaris.experience import SampleBatch, get_epochs
@@ -11,10 +14,9 @@ tf.compat.v1.enable_eager_execution()
 
 from polaris.policies.utils.misc import explained_variance
 
-
 class PPO(ParametrisedPolicy):
 
-    needed_keys = [SampleBatch.OBS,
+    needed_keys = [
             SampleBatch.OBS,
             SampleBatch.ACTION,
             SampleBatch.PREV_ACTION,
@@ -24,7 +26,7 @@ class PPO(ParametrisedPolicy):
             SampleBatch.ACTION_LOGITS,
             SampleBatch.ACTION_LOGP,
             SampleBatch.ADVANTAGES,
-            SampleBatch.VF_TARGETS
+            SampleBatch.VF_TARGETS,
             ]
 
     def __init__(
@@ -77,23 +79,40 @@ class PPO(ParametrisedPolicy):
         for k in to_del:
             del input_batch[k]
 
+
         tm_input_batch = make_time_major(input_batch)
 
         nn_train_time = time.time()
 
-        # normalise advantages
+        # normalise advantages # TODO: add option to normalise over whole batch or minibatch
+        num_minibatch = 0
+        metrics = None
 
-        adv = tm_input_batch[SampleBatch.ADVANTAGES]
-        tm_input_batch[SampleBatch.ADVANTAGES][:] = (adv-np.mean(adv)) / np.maximum(1e-4, np.std(adv))
 
         for minibatch in get_epochs(tm_input_batch,
                                     n_epochs=self.config.n_epochs,
-                                    minibatch_size=self.config.minibatch_size
+                                    minibatch_size=self.config.minibatch_size,
+                                    shuffle_minibatches=False,
                                     ):
 
-            metrics = self._train(
+            adv = minibatch[SampleBatch.ADVANTAGES]
+            minibatch[SampleBatch.ADVANTAGES][:] = (adv - np.mean(adv)) / (1e-8 + np.std(adv))
+
+            minibatch_metrics = self._train(
                 **minibatch
             )
+
+            print(minibatch_metrics['pi_loss'], minibatch_metrics["clip_frac"], minibatch_metrics['logp_ratio'])
+
+            if metrics is None:
+                metrics = minibatch_metrics
+            else:
+                metrics = tree.map_structure(
+                    lambda m, mm: num_minibatch * m / (num_minibatch + 1) + mm / (num_minibatch + 1),
+                    metrics,
+                    minibatch_metrics
+                )
+            num_minibatch += 1
 
 
         last_kl = metrics["kl"]
@@ -149,19 +168,15 @@ class PPO(ParametrisedPolicy):
                 prev_action_dist = self.model.action_dist(action_logits)
                 entropy = tf.boolean_mask(curr_action_dist.entropy(), mask)
 
-                logp_ratio = tf.exp(curr_action_logp - action_logp)
+                ratio = tf.exp(curr_action_logp - action_logp)
 
-                surrogate_loss = tf.minimum(
-                    advantages * logp_ratio,
-                    advantages
-                    * tf.clip_by_value(
-                        logp_ratio,
-                        1 - self.policy_config.ppo_clip,
-                        1 + self.policy_config.ppo_clip,
-                    ),
+                pg_loss1 = -advantages * ratio
+                pg_loss2 = -advantages * tf.clip_by_value(
+                    ratio, 1 - self.policy_config.ppo_clip, 1 + self.policy_config.ppo_clip
                 )
+                policy_loss = tf.maximum(pg_loss1, pg_loss2)
 
-                policy_loss = -tf.reduce_mean(tf.boolean_mask(surrogate_loss, mask))
+                policy_loss = tf.reduce_mean(tf.boolean_mask(policy_loss, mask))
 
                 critic_loss = self.model.critic_loss(vf_targets)
                 critic_loss_clipped = tf.clip_by_value(
@@ -191,6 +206,7 @@ class PPO(ParametrisedPolicy):
             tf.boolean_mask(vf_targets, mask),
             tf.boolean_mask(vf_preds, mask)
         )
+        clip_frac = tf.reduce_mean(tf.boolean_mask(tf.abs(tf.cast(ratio - 1.0 > self.policy_config.ppo_clip, dtype=tf.float32)), mask))
 
         train_metrics = {
             "mean_entropy": mean_entropy,
@@ -201,7 +217,8 @@ class PPO(ParametrisedPolicy):
             "kl": mean_kl,
             "kl_loss": kl_loss,
             "kl_coeff": self.kl_coeff,
-            "logp_ratio": tf.reduce_mean(tf.boolean_mask(logp_ratio, mask)),
+            "logp_ratio": tf.reduce_mean(tf.boolean_mask(ratio, mask)),
+            "clip_frac": clip_frac
         }
 
         train_metrics.update(self.model.get_metrics())

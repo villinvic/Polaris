@@ -129,7 +129,10 @@ class Metric:
                     if isinstance(value, dict):
                         # barplot
                         for k in value:
-                            self.init_value[k] = value[k] * n_samples / next_count + self.init_value[k] * self.init_count / next_count
+                            if k not in self.init_value:
+                                self.init_value[k] = value[k]
+                            else:
+                                self.init_value[k] = value[k] * n_samples / next_count + self.init_value[k] * self.init_count / next_count
                     else:
                         self.init_value = value * n_samples / next_count + self.init_value * self.init_count / next_count
                 self.init_count = next_count
@@ -140,7 +143,10 @@ class Metric:
                 if isinstance(value, dict) :
                     # barplot
                     for k in value:
-                        self._v[k] = (1. - lr) * self._v[k] + lr * value[k]
+                        if k not in self._v:
+                            self._v[k] = value[k]
+                        else:
+                            self._v[k] = (1. - lr) * self._v[k] + lr * value[k]
                 else:
                     self._v = (1. - lr) * self._v + lr * value
                 if self.history is not None:
@@ -159,9 +165,9 @@ class Metric:
         self._v = v
 
     def report(self):
-        step = np.int32(GlobalCounter[GlobalCounter.ENV_STEPS])
+        step = np.int32(GlobalCounter[GlobalCounter.STEP])
         if isinstance(self._v, dict):
-            fig = plot_utils.dict_barplot(self._v, color='skyblue')
+            fig = plot_utils.dict_barplot(self._v, color='red')
             wandb.log({self.name: fig}, step=step)
         if isinstance(self._v, np.ndarray):
             wandb.log({

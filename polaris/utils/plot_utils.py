@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import numpy as np
 
 
-def dict_barplot(data_dict, max_bars=10):
+def dict_barplot(data_dict, max_bars=10, color="red"):
     """
     util to plot a barplot given dictionary of categorical data.
     Used to report dict metrics to wandb.
@@ -13,7 +13,7 @@ def dict_barplot(data_dict, max_bars=10):
     categories = list(sorted_data.keys())
     values = np.array(list(sorted_data.values()), dtype=np.int32)
 
-    fig = go.Figure(data=[go.Bar(x=categories, y=values, text=values, textposition='auto')])
+    fig = go.Figure(data=[go.Bar(x=categories, y=values, text=values, marker_color=color, textposition='auto')])
 
     fig.update_layout(font=dict(size=10),
         xaxis_tickangle=-45,  # Rotate x-axis labels for better readability

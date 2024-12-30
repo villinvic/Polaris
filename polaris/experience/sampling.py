@@ -311,10 +311,10 @@ class ExperienceQueue:
                 yield self.queue.get_from_indices(indices)
 
 
-def get_epochs(time_major_batch, n_epochs, minibatch_size):
+def get_epochs(time_major_batch, n_epochs, minibatch_size, shuffle_minibatches=True):
     """
     Constructs epochs constructed with minibatches of specified size.
-    Minibatches are shuffled between each epoch.
+    Minibatches can be shuffled between each epoch.
     """
     max_seq_len, n_trajectories = time_major_batch[SampleBatch.ACTION].shape[:2]
     seq_lens = np.array(time_major_batch.pop(SampleBatch.SEQ_LENS))
@@ -325,8 +325,13 @@ def get_epochs(time_major_batch, n_epochs, minibatch_size):
 
     ordering = np.arange(n_trajectories)
     for k in range(n_epochs):
-        np.random.shuffle(ordering)
-        minibatch_indices = np.split(ordering, batch_size//minibatch_size)
+        if shuffle_minibatches:
+            np.random.shuffle(ordering)
+        try:
+            minibatch_indices = np.split(ordering, batch_size//minibatch_size)
+        except ValueError:
+            raise ValueError(f"Have {n_trajectories} trajectories, cannot be split into {batch_size//minibatch_size} ({batch_size}//{minibatch_size}) minibatches.")
+
         for indices in minibatch_indices:
             def f(d):
                 return d[:, indices]

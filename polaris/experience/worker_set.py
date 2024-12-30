@@ -113,20 +113,20 @@ class SyncWorkerSet:
 
         job_refs = []
 
-        if not push_back and self.waiting:
-            return job_refs
+        if not push_back:
+            if self.waiting:
+                return job_refs
 
-        for wid, job in self.running_jobs.items():
-            if wid in self.waiting_workers:
+            for wid, job in self.running_jobs.items():
+                if wid in self.waiting_workers:
+                    for aid, params in job.items():
+                        if params.name in params_map:
+                            job[aid] = params_map[params.name]
+                    self.waiting_workers -= {wid}
 
-                for aid, params in job.items():
-                    if params.name in params_map:
-                        job[aid] = params_map[params.name]
-                self.waiting_workers -= {wid}
-
-                job_refs.append(self.workers[wid].get_next_batch_for.remote(
-                    job
-                ))
+                    job_refs.append(self.workers[wid].get_next_batch_for.remote(
+                        job
+                    ))
 
         hired_workers = set()
         for wid, job in zip(self.available_workers, jobs):
@@ -135,6 +135,7 @@ class SyncWorkerSet:
             job_refs.append(self.workers[wid].get_next_batch_for.remote(
                 job
             ))
+        print(len(jobs), len(hired_workers))
         self.available_workers -= hired_workers
         self.waiting_workers -= hired_workers
 

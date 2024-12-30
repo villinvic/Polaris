@@ -102,8 +102,6 @@ class Episode:
 
         while not dones["__all__"]:
             for aid, policy in self.agents_to_policies.items():
-                # TODO: VICTOR: memory leak here
-                # check more retracing ?
                 actions[aid], next_states[aid], extras[aid] = policy.compute_single_action_with_extras(
                     **batchify_input(
                         obs=observations[aid],

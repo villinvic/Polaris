@@ -110,13 +110,10 @@ class BaseModel(snt.Module):
         )
 
         action_logits = tf.squeeze(action_logits)
+
         action_dist = self.action_dist(action_logits)
         action = action_dist.sample()
         logp = action_dist.logp(action)
-
-        action_logits = tf.squeeze(action_logits)
-        action_dist = self.action_dist(action_logits)
-        action = action_dist.sample()
 
         extras[SampleBatch.ACTION_LOGP] = logp
         extras[SampleBatch.ACTION_LOGITS] = action_logits
