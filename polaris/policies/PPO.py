@@ -102,8 +102,6 @@ class PPO(ParametrisedPolicy):
                 **minibatch
             )
 
-            print(minibatch_metrics['pi_loss'], minibatch_metrics["clip_frac"], minibatch_metrics['logp_ratio'])
-
             if metrics is None:
                 metrics = minibatch_metrics
             else:
