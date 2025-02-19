@@ -99,25 +99,17 @@ def compute_bootstrap_value(sample_batch: SampleBatch, policy: Policy) -> Sample
     """
 
     # Trajectory is actually complete -> last r=0.0.
+    if SampleBatch.VALUES not in sample_batch:
+        # attempt to compute the values
+        raise NotImplementedError("we have yet to implement this !")
+        sample_batch[SampleBatch.VALUES] = values
+
+
+
     if sample_batch[SampleBatch.DONE][-1]:
         last_r = 0.0
     # Trajectory has been truncated -> last r=VF estimate of last obs.
     else:
-        if SampleBatch.VALUES not in sample_batch:
-            # attempt to compute the values
-
-            # Could do ** sample_batch maybe here.
-            values = policy.compute_value_batch(
-                **batchify_input(
-                obs=sample_batch[SampleBatch.OBS],
-                prev_action=sample_batch[SampleBatch.PREV_ACTION],
-                prev_reward=sample_batch[SampleBatch.PREV_REWARD],
-                state=sample_batch[SampleBatch.STATE],
-                seq_lens=sample_batch[SampleBatch.SEQ_LENS]
-                )
-            )
-            sample_batch[SampleBatch.VALUES] = values
-
         last_r = policy.compute_single_action_with_extras(
             **batchify_input(
             obs= tree.map_structure(lambda v: v[-1],sample_batch[SampleBatch.NEXT_OBS]),
@@ -136,9 +128,8 @@ def compute_gae_for_sample_batch(
     sample_batch: SampleBatch,
 ) -> SampleBatch:
 
-    # Compute the SampleBatch.VALUES_BOOTSTRAPPED column, which we'll need for the
-    # following `last_r` arg in `compute_advantages()`.
-    sample_batch = compute_bootstrap_value(sample_batch, policy)
+    if SampleBatch.BOOTSTRAP_VALUE not in sample_batch:
+        sample_batch = compute_bootstrap_value(sample_batch, policy)
 
     # Adds the policy logits, VF preds, and advantages to the batch,
     # using GAE ("generalized advantage estimation") or not.
@@ -154,6 +145,50 @@ def compute_gae_for_sample_batch(
     #    print(batch[SampleBatch.ADVANTAGES])
 
     return batch
+
+
+
+def batched_gae(
+        sample_batch: SampleBatch,
+        policy: Policy,
+):
+    """
+    Computes and adds entries for advantages and vf_targets in the sample batch.
+
+    Returns:
+        dict: Updated sample_batch with 'advantages' and 'vf_targets' added.
+    """
+
+    gamma = policy.policy_config.discount
+    gae_lambda = policy.policy_config.gae_lambda
+
+
+    values = sample_batch[SampleBatch.VALUES]
+    rewards = sample_batch[SampleBatch.REWARD]
+    dones = sample_batch[SampleBatch.DONE]
+    bootstrapped_values = sample_batch[SampleBatch.BOOTSTRAP_VALUE]
+
+    values = np.vstack([values, bootstrapped_values[np.newaxis, :]])
+
+    deltas = rewards + gamma * values[1:] * (1 - dones) - values[:-1]
+    deltas_flipped = deltas[::-1]
+
+    filter_coeff = [1]
+    gain = gamma * gae_lambda
+
+    advantages_flipped = scipy.signal.lfilter(filter_coeff, [1, -gain], deltas_flipped, axis=0)
+
+    # Reverse advantages back to original order
+    advantages = advantages_flipped[::-1]
+
+    # Compute value function targets
+    vf_targets = advantages + sample_batch[SampleBatch.VALUES]
+
+    # Update sample_batch
+    sample_batch[SampleBatch.ADVANTAGES] = advantages.astype(np.float32)
+    sample_batch[SampleBatch.VF_TARGETS] = vf_targets.astype(np.float32)
+
+    return sample_batch
 
 
 if __name__ == '__main__':

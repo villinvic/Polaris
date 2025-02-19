@@ -142,7 +142,7 @@ class BaseModel(snt.Module):
         dummy_state_0 = self.get_initial_state()
 
         dummy_state = tree.map_structure(
-            lambda v: np.repeat(v, B, axis=0), dummy_state_0
+            lambda v: tf.convert_to_tensor(np.repeat(v, B, axis=0)), dummy_state_0
         )
         seq_lens = np.ones((B,), dtype=np.int32) * T
 
@@ -156,8 +156,8 @@ class BaseModel(snt.Module):
 
         inputs = batchify_input(
             obs=x,
-            prev_action=dummy_action[0, :1],
-            prev_reward=dummy_reward[0, :1],
+            prev_action=dummy_action[0, 0],
+            prev_reward=dummy_reward[0, 0],
             state=dummy_state_0,
         )
 

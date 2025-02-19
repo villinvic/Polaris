@@ -1,14 +1,17 @@
-from typing import Dict, Generator
+from typing import Dict, Generator, List, Tuple, Any
 import time
 
+import tree
 from ml_collections import ConfigDict
 import ray
 import copy
 from gymnasium.error import ResetNeeded
 
+from polaris.experience.vectorised_episode import VectorisableEpisode, EpisodeState
+from polaris.experience.timestep import TimeStep
 from polaris.policies import Policy, PolicyParams, RandomPolicy
 from polaris.experience.sampling import SampleBatch
-from polaris.experience.episode import Episode, EpisodeSpectator
+from polaris.experience.episode import Episode, EpisodeSpectator, EpisodeMetrics
 from polaris.environments.polaris_env import PolarisEnv
 from polaris.policies.utils.gae import compute_gae_for_sample_batch
 import importlib
@@ -210,3 +213,76 @@ class SyncEnvWorker:
             time.sleep(2)
             self.env = PolarisEnv.make(self.config.env, env_index=self.worker_id, **self.config.env_config)
             return self.worker_id, [None]
+
+
+
+def map_index(batched, i):
+    return tree.map_structure(
+        lambda v: v[i],
+        batched
+    )
+
+
+@ray.remote(num_gpus=0, num_cpus=1)
+class VectorisedEnvWorker:
+
+    def __init__(
+            self,
+            *,
+            worker_id: int,
+            config: ConfigDict,
+    ):
+
+        self.config = config
+        self.callbacks = config.episode_callback_class(config)
+        self.num_envs = config.num_envs_per_worker
+        self.worker_id = worker_id
+        self.config = config
+
+        self.envs = [
+                PolarisEnv.make(self.config.env, env_index=self.worker_id * self.num_envs + env_id, **self.config.env_config)
+                for env_id in range(self.num_envs)
+            ]
+
+        self.episodes = [
+            VectorisableEpisode(
+                env,
+                self.callbacks,
+                config
+            )
+            for env in self.envs
+        ]
+
+    def step(
+            self,
+            actions,
+            options,
+    ) -> Tuple[List[Dict[Any, TimeStep]], List[EpisodeMetrics], int]:
+        timesteps = []
+        episode_metrics = []
+
+        for i, episode in enumerate(self.episodes):
+            try:
+                # TODO: only works with discrete action spaces
+                timesteps.append(
+                    episode.step(map_index(actions, i),
+                                 options,
+                                 #map_index(options, i)
+                                 ))
+            except ResetNeeded as e:
+                print(f"Restarting environment {episode.env.env_index}:", e)
+                episode.env.close()
+                time.sleep(1)
+                episode.state = EpisodeState.CRASHED
+
+            if episode.state in (EpisodeState.TERMINATED, EpisodeState.CRASHED):
+                metrics = episode.get_metrics()
+                if metrics is not None:
+                    episode_metrics.append(episode.get_metrics())
+
+                episode.reset()
+
+        return timesteps, episode_metrics, self.worker_id
+
+
+

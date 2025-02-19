@@ -304,6 +304,10 @@ class MetricBank:
 
 
 def metric_path_name(metric_path):
-    return  "/".join(metric_path).replace("'", "").replace(",","").replace(" ", "_")
+    try:
+        return  "/".join(metric_path).replace("'", "").replace(",","").replace(" ", "_")
+    except Exception as e:
+        print(metric_path)
+        raise e
 
 

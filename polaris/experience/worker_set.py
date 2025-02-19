@@ -1,12 +1,15 @@
+import itertools
 from typing import List, Tuple, Union, Dict
 
+import tree
 from ml_collections import ConfigDict
 import ray
 from polaris.policies import PolicyParams
 
-from .environment_worker import EnvWorker, SyncEnvWorker
+from .environment_worker import EnvWorker, SyncEnvWorker, VectorisedEnvWorker
 from .episode import EpisodeMetrics
 from .sampling import SampleBatch
+from .timestep import TimeStep
 
 
 class AsyncWorkerSet:
@@ -135,7 +138,6 @@ class SyncWorkerSet:
             job_refs.append(self.workers[wid].get_next_batch_for.remote(
                 job
             ))
-        print(len(jobs), len(hired_workers))
         self.available_workers -= hired_workers
         self.waiting_workers -= hired_workers
 
@@ -189,6 +191,93 @@ class SyncWorkerSet:
                     returns.append(ret)
 
         return returns, job_refs
+
+
+def map_slice(batched, slice):
+    return tree.map_structure(lambda v: v[slice], batched)
+
+
+
+class VectorisedWorkerSet:
+    def __init__(
+            self,
+            config: ConfigDict,
+    ):
+        """
+        Vectorised set of environment workers.
+        We assume the main GPU process does all computations related to models
+        """
+        self.num_workers = config.num_workers
+        self.inference_batch_size = config.inference_batch_size
+        self.num_envs_per_worker = config.num_envs_per_worker
+
+
+        self.workers = {
+            wid: VectorisedEnvWorker.remote(
+                worker_id=wid,
+                config=config,
+            )
+            for wid in range(config.num_workers)
+        }
+        # if (config.num_workers * config.num_envs_per_worker) % self.inference_batch_size != 0:
+        #     raise ValueError(f"inference_batch_size must divide (num_workers * num_envs_per_worker) !"
+        #                      f" {config.num_workers * config.num_envs_per_worker} % {self.inference_batch_size} != 0.")
+        if self.inference_batch_size % config.num_envs_per_worker != 0:
+            raise ValueError(f"num_envs_per_worker must divide inference_batch_size !"
+                             f" {self.inference_batch_size} % {self.num_envs_per_worker} != 0.")
+
+        self.ongoing_job_refs = []
+        self.available_workers = set(self.workers.keys())
+
+    def num_envs(self):
+        return self.num_envs_per_worker * self.num_workers
+
+    def requires_options(self):
+        return [wid in self.available_workers for wid in self.workers]
+
+
+    def send(
+            self,
+            actions,
+            options
+    ):
+        self.ongoing_job_refs.extend([
+            self.workers[wid].step.remote(
+                map_slice(actions, slice(i * self.num_envs_per_worker, (i + 1) * self.num_envs_per_worker, 1)),
+                options,
+                # options[wid * self.num_envs_per_worker: (wid + 1) * self.num_envs_per_worker]
+            )
+            for i, wid in enumerate(self.available_workers)])
+
+        self.available_workers = set()
+
+    def recv(self) -> Tuple[List[TimeStep], List[EpisodeMetrics]]:
+        ready_jobs, self.ongoing_job_refs = ray.wait(self.ongoing_job_refs,
+                                                     num_returns=self.inference_batch_size // self.num_envs_per_worker,
+                                                     timeout=None)
+
+        data = ray.get(ready_jobs)
+
+        samples = []
+        metrics = []
+
+        for s, m, w in data:
+            self.available_workers.add(w)
+
+            samples.extend(s)
+            metrics.extend(m)
+
+        return samples, metrics
+
+
+    def step(
+            self,
+            actions,
+            options
+    ) -> Tuple[List[TimeStep], List[EpisodeMetrics]]:
+
+        self.send(actions, options)
+        return self.recv()
 
 
 

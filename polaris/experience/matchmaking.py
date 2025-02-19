@@ -36,19 +36,34 @@ class MatchMaking(ABC):
 
 class RandomMatchmaking(MatchMaking):
 
+    def __init__(
+            self,
+            agent_ids,
+            **kwargs
+    ):
+        """
+        A matchmaking dictates which policies to sample for each new episode.
+        """
+
+        self.agent_ids = agent_ids
+
     def next(
             self,
-            params_map: Dict[str, "PolicyParams"],
+            policy_ids,
+
             **kwargs,
     ) -> Dict[str, "PolicyParams"]:
+        """
+        Returns a matchmaking (dict of AgentID:PolicyParams) based on the provided params map.
+        """
+        pass
 
-        sampled_policies = np.random.choice(len(params_map), size=len(self.agent_ids), replace=len(params_map)<len(self.agent_ids))
+    def update(self, **kwargs):
+        pass
 
-        param_values = list(params_map.values())
-        r = {
-            aid: param_values[pid] for pid, aid in zip(sampled_policies, self.agent_ids)
-        }
-        return r
+    def metrics(self):
+        return {}
+
 
 class TwoPlayerEloRanking(MatchMaking):
 

@@ -83,7 +83,7 @@ class SampleBatch(dict):
     def size(self):
         return self.trajectory_length
 
-    def push(self, data, flush=False):
+    def  push(self, data, flush=False):
         if self.is_full():
             self.reset()
 
@@ -316,14 +316,17 @@ def get_epochs(time_major_batch, n_epochs, minibatch_size, shuffle_minibatches=T
     Constructs epochs constructed with minibatches of specified size.
     Minibatches can be shuffled between each epoch.
     """
+
     max_seq_len, n_trajectories = time_major_batch[SampleBatch.ACTION].shape[:2]
     seq_lens = np.array(time_major_batch.pop(SampleBatch.SEQ_LENS))
+
+    # TODO comment for now
     state = time_major_batch.pop(SampleBatch.STATE)
     next_state = time_major_batch.pop(SampleBatch.NEXT_STATE, None)
 
     batch_size = max_seq_len * n_trajectories
-
     ordering = np.arange(n_trajectories)
+
     for k in range(n_epochs):
         if shuffle_minibatches:
             np.random.shuffle(ordering)
@@ -340,7 +343,9 @@ def get_epochs(time_major_batch, n_epochs, minibatch_size, shuffle_minibatches=T
                 f,
                 time_major_batch
             )
+
             minibatch[SampleBatch.SEQ_LENS] = seq_lens[indices]
+
             minibatch[SampleBatch.STATE] = tree.map_structure(lambda x: x[indices], state)
             if next_state is not None:
                 minibatch[SampleBatch.NEXT_STATE] = tree.map_structure(lambda x: x[indices], next_state)

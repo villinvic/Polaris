@@ -79,8 +79,10 @@ class PPO(ParametrisedPolicy):
         for k in to_del:
             del input_batch[k]
 
-
-        tm_input_batch = make_time_major(input_batch)
+        if len(input_batch[SampleBatch.PREV_REWARD].shape) == 1:
+            tm_input_batch = make_time_major(input_batch)
+        else:
+            tm_input_batch = input_batch
 
         nn_train_time = time.time()
 
@@ -88,15 +90,16 @@ class PPO(ParametrisedPolicy):
         num_minibatch = 0
         metrics = None
 
+        adv = tm_input_batch[SampleBatch.ADVANTAGES]
+
+        tm_input_batch[SampleBatch.ADVANTAGES][:] = (adv - np.mean(adv)) / (1e-8 + np.std(adv))
+
 
         for minibatch in get_epochs(tm_input_batch,
                                     n_epochs=self.config.n_epochs,
                                     minibatch_size=self.config.minibatch_size,
-                                    shuffle_minibatches=False,
+                                    shuffle_minibatches=True,
                                     ):
-
-            adv = minibatch[SampleBatch.ADVANTAGES]
-            minibatch[SampleBatch.ADVANTAGES][:] = (adv - np.mean(adv)) / (1e-8 + np.std(adv))
 
             minibatch_metrics = self._train(
                 **minibatch
@@ -193,7 +196,22 @@ class PPO(ParametrisedPolicy):
                 else:
                     mean_kl = 0.
                     kl_loss = tf.constant(0.0)
+
                 total_loss = (critic_loss + policy_loss - mean_entropy * self.policy_config.entropy_cost + kl_loss)
+                if hasattr(self.model, "aux_loss"):
+                    total_loss += self.policy_config.aux_loss_weight * self.model.aux_loss(
+                        obs=obs,
+                        action=action,
+                        prev_action=prev_action,
+                        prev_reward=prev_reward,
+                        state=state,
+                        seq_lens=seq_lens,
+                        action_logits=action_logits,
+                        action_logp=action_logp,
+                        advantages=advantages,
+                        vf_targets=vf_targets
+                    )
+
 
         gradients = tape.gradient(total_loss, self.model.trainable_variables)
         gradients, mean_grad_norm = tf.clip_by_global_norm(gradients, self.policy_config.grad_clip)
@@ -204,6 +222,7 @@ class PPO(ParametrisedPolicy):
             tf.boolean_mask(vf_targets, mask),
             tf.boolean_mask(vf_preds, mask)
         )
+
         clip_frac = tf.reduce_mean(tf.boolean_mask(tf.abs(tf.cast(ratio - 1.0 > self.policy_config.ppo_clip, dtype=tf.float32)), mask))
 
         train_metrics = {

@@ -23,5 +23,6 @@ setup(
     "wandb",
     "plotly",
     "scipy",
+    "tqdm",
     ]
 )

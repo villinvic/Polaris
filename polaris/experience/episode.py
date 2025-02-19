@@ -191,6 +191,7 @@ class Episode:
             self.env.get_episode_metrics(),
             self.custom_metrics
         )
+        self.custom_metrics.update(self.env.get_episode_metrics())
 
         self.metrics = EpisodeMetrics(
             stepping_time_ms=1000.*np.float32(time.time()-t1) / t,
@@ -241,22 +242,41 @@ class EpisodeSpectator(Episode):
         while not dones["__all__"]:
             for aid, policy in self.agents_to_policies.items():
 
-                actions[aid], states[aid] = policy.compute_single_action(
-                    **batchify_input(
+                b = batchify_input(
                         obs=observations[aid],
                         prev_action=actions[aid],
                         prev_reward=rewards[aid],
                         state=states[aid]
 
                     )
+
+                actions[aid], states[aid] = policy.compute_single_action(
+                    **b
                 )
 
             try:
                 observations, rewards, dones, truncs, infos = self.env.step(actions)
+
             except ResetNeeded as e:
                 for aid, sample_batch in sample_batches.items():
                     sample_batch.reset()
                 raise e
+
+            t += 1
+
+            # for k, v in infos.items():
+            #     timings[k] += v
+            #
+            # timings["batching"] += batching_time
+            # timings['inference'] += inference_time
+            # sum_times = sum(timings.values())
+            # step_time = timings.get("step_time", 0)
+            # time_left =  t / 60 - (sum_times - step_time)
+            #
+            # print(
+            #     {k: v/sum_times for k, v in timings.items()},
+            #       {k: v / t for k, v in timings.items()},
+            #       time_left / t, sum_times / t)
 
             dones["__all__"] = dones["__all__"] or truncs["__all__"]
 
