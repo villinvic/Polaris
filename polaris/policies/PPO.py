@@ -2,8 +2,6 @@ import time
 from typing import Dict
 
 import tree
-from pyximport import pyximport
-
 from polaris.policies.utils.batch_processing import make_time_major
 from .parametrised import ParametrisedPolicy
 from polaris.experience import SampleBatch, get_epochs
@@ -37,6 +35,7 @@ class PPO(ParametrisedPolicy):
             options=None,
             **kwargs
     ):
+
         self.kl_coeff = tf.Variable(
             policy_config.initial_kl_coeff,
             trainable=False,
@@ -56,6 +55,9 @@ class PPO(ParametrisedPolicy):
         return w
 
     def set_weights(self, weights: Dict):
+        # TODO: is this copy slow ? poping the dict gets rid of the kl_coeff globaly
+        weights = weights.copy()
+
         kl_coeff = weights.pop("kl_coeff", None)
         if kl_coeff is not None:
             self.kl_coeff.assign(kl_coeff)
@@ -100,7 +102,6 @@ class PPO(ParametrisedPolicy):
                                     minibatch_size=self.config.minibatch_size,
                                     shuffle_minibatches=True,
                                     ):
-
             minibatch_metrics = self._train(
                 **minibatch
             )

@@ -1,10 +1,10 @@
+from typing import Tuple, Any
+
 import sonnet as snt
 import numpy as np
 from gymnasium.spaces import Discrete
 import tensorflow as tf
 from .base import BaseModel
-from tensorflow.keras.optimizers import RMSprop
-
 from .utils.categorical_distribution import CategoricalDistribution
 from polaris.experience import SampleBatch
 
@@ -29,14 +29,9 @@ class FCModel(BaseModel):
             config=config,
         )
         self.output_size = action_space.n
-        # todo: change to snt optim
-        self.optimiser = snt.optimizers.RMSProp(
+        self.optimiser = snt.optimizers.Adam(
             learning_rate=config.lr,
-            decay=config.rms_prop_rho,
-            momentum=0.0,
-            epsilon=config.rms_prop_epsilon,
-            centered=False,
-            name="rmsprop"
+            epsilon=1e-5,
         )
 
         self.action_dist = CategoricalDistribution
@@ -55,103 +50,88 @@ class FCModel(BaseModel):
             name="values"
         )
 
-    def initialise(self):
+    def single_input(
+            self,
+            obs,
+            prev_action,
+            prev_reward,
+            state
+    ):
+        return self._mlp(tf.expand_dims(obs, axis=0))
 
-        T = 5
-        B = 3
-        x = self.observation_space.sample()
-        dummy_obs = np.zeros_like(x, shape=(T, B) + x.shape)
+    def batch_input(
+            self,
+            obs,
+            prev_action,
+            prev_reward,
+            state
+    ):
+        return self._mlp(obs)
 
-        @tf.function
-        def run(d):
-            self(
-                d
-            )
-        run({
-                    SampleBatch.OBS: dummy_obs,
-                 })
+    def forward_single_action_with_extras(
+            self,
+            obs,
+            prev_action,
+            prev_reward,
+            state
+    ):
+        final_embeddings = self.single_input(
+            obs,
+            prev_action,
+            prev_reward,
+            state
+        )
 
-    def forward(
+        policy_logits = self._pi_out(final_embeddings)
+        extras = {
+            SampleBatch.VALUES: tf.squeeze(self._value_out(final_embeddings))
+        }
+        return policy_logits, state, extras
+
+    def forward_single_action(
+            self,
+            obs,
+            prev_action,
+            prev_reward,
+            state
+    ):
+        final_embeddings = self.single_input(
+            obs,
+            prev_action,
+            prev_reward,
+            state
+        )
+
+        return self._pi_out(final_embeddings), state
+
+    def __call__(
             self,
             *,
             obs,
-            **kwargs,
-    ):
-        x = self._mlp(obs)
-
-        pi_out = self._pi_out(x)
-        self._values = tf.squeeze(self._value_out(x))
-
-        return (pi_out, None), self._values, {}
-
-
-class FCModelNoBias(BaseModel):
-    """
-    We expect users to code their own model.
-    This one expects a box as observation and a discrete space for actions
-    """
-
-    def __init__(
-            self,
-            observation_space,
-            action_space: Discrete,
-            config,
-    ):
-        super(FCModelNoBias, self).__init__(
-            name="FCModelNoBias",
-            observation_space=observation_space,
-            action_space=action_space,
-            config=config,
-        )
-        self.output_size = action_space.n
-        self.optimiser = RMSprop(
-            learning_rate=config.lr,
-            rho=config.rms_prop_rho,
-            epsilon=config.rms_prop_epsilon
-        )
-        self.action_dist = CategoricalDistribution
-
-        self._mlp = snt.nets.MLP(
-            output_sizes=self.config.fc_dims,
-            activate_final=True,
-            name="MLP"
-        )
-        self._pi_out = snt.Linear(
-            output_size=self.output_size,
-            name="action_logits"
-        )
-        self._value_out = snt.Linear(
-            output_size=1,
-            name="values",
-            b_init=tf.zeros
-        )
-
-    def initialise(self):
-
-        T = 5
-        B = 3
-        x = self.observation_space.sample()
-        dummy_obs = np.zeros_like(x, shape=(T, B) + x.shape)
-
-        @tf.function
-        def run(d):
-            self(
-                d
-            )
-        run({
-                    SampleBatch.OBS: dummy_obs,
-                 })
-
-    def forward(
-            self,
-            *,
+            prev_action,
+            prev_reward,
+            state,
+            seq_lens
+    ) -> Tuple[Any, Any]:
+        final_embeddings = self.batch_input(
             obs,
-            **kwargs,
+            prev_action,
+            prev_reward,
+            state
+        )
+        policy_logits = self._pi_out(final_embeddings)
+        self._values = tf.squeeze(self._value_out(final_embeddings))
+        return policy_logits, self._values
+
+    def critic_loss(
+            self,
+            vf_targets
     ):
-        x = self._mlp(obs)
+        return tf.math.square(vf_targets - self._values)
 
-        pi_out = self._pi_out(x)
-        self._values = tf.squeeze(self._value_out(x))
+    def get_initial_state(self):
+        return (np.zeros(1, dtype=np.float32),)
 
-        return pi_out, None
+    def get_metrics(self):
+        return {}
 

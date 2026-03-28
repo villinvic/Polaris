@@ -88,12 +88,14 @@ class Checkpointable:
         :param metrics: metrics used to test the stopping condition.
         """
 
-        done = False
+
         for m, v in  self.stopping_condition.items():
-            done = metrics.get(done, 0) >= v
-            if done:
-                return done
-        return done
+            metric = metrics.get(m, False)
+            if not metric:
+                continue
+            if metric.get() >= v:
+                return True
+        return False
 
     def checkpoint_if_needed(self):
         """

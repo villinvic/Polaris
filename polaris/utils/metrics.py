@@ -108,6 +108,9 @@ class Metric:
         self.history = [] if save_history else None
 
         self.last_update = 0
+        self.last_report = None
+
+        self.has_changed = True
 
     def update(self, value, n_samples=1):
         """
@@ -166,6 +169,12 @@ class Metric:
 
     def report(self):
         step = np.int32(GlobalCounter[GlobalCounter.STEP])
+        # we want to report only if the value changed in the last "report_freq"
+        # but we also want to report the value if it changed since last time we reported.
+        if self.last_report is not None and self.last_update < self.last_report:
+            return
+
+        self.last_report = step
         if isinstance(self._v, dict):
             fig = plot_utils.dict_barplot(self._v, color='red')
             wandb.log({self.name: fig}, step=step)
@@ -186,7 +195,7 @@ class Metric:
             #tf.summary.scalar(self.name, self._v, step=GlobalCounter[GlobalCounter.ENV_STEPS])
 
     def is_old(self):
-        return (not hasattr(self, "last_update")) or (GlobalCounter["step"] - self.last_update > 100)
+        return (not hasattr(self, "last_update")) or (GlobalCounter["step"] - self.last_update > 1_000)
 
 
 class Metrics(dict): pass
@@ -256,7 +265,6 @@ class MetricBank:
         :param prefix: additional prefix for the batch metrics
         :param smoothing: smoothing for new entries
         """
-
         for metric_name, value in batch:
             if isinstance(metric_name, tuple):
                 metric_name = metric_path_name(metric_path=metric_name)
@@ -273,15 +281,17 @@ class MetricBank:
 
     def report(
             self,
-            print_metrics=False
+            print_metrics=False,
+            force=False
     ):
         """
         Reports the metrics to wandb.
 
         :param print_metrics: to print the metrics to the terminal as well.
+        :param force: force report regardless of the report frequency.
         """
 
-        if self.last_report != GlobalCounter["step"] and GlobalCounter["step"] % self.report_freq == 0:
+        if force or (self.last_report != GlobalCounter["step"] and GlobalCounter["step"] % self.report_freq == 0):
             self.last_report = GlobalCounter["step"]
             if print_metrics:
                 print(f"==================================== Iteration {GlobalCounter['step']} ====================================")

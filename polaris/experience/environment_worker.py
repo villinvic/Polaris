@@ -40,11 +40,12 @@ class EnvWorker:
 
         # We can extend to multiple policy types if really needed, but won't be memory efficient
         PolicyCls = getattr(importlib.import_module(self.config.policy_path), self.config.policy_class)
+
         self.policy_placeholders: Dict[str, Policy] = {
             f"parametrised_{aid}": PolicyCls(
                 name="placeholder",
-                action_space=self.env.action_space,
-                observation_space=self.env.observation_space,
+                action_space=self.env.action_space if not isinstance(self.env.action_space, dict) else self.env.action_space[aid],
+                observation_space=self.env.observation_space if not isinstance(self.env.observation_space, dict) else self.env.observation_space[aid],
                 config=self.config,
                 options={},
                 stats={},
@@ -52,8 +53,8 @@ class EnvWorker:
             )
             for aid in self.env.get_agent_ids()
         }
-        random_policy = RandomPolicy(self.env.action_space, self.config)
         for aid in self.env.get_agent_ids():
+            random_policy = RandomPolicy(self.env.action_space if not isinstance(self.env.action_space, dict) else self.env.action_space[aid], self.config)
             self.policy_placeholders[f"random_{aid}"] = random_policy
 
         self.sample_buffer = {
@@ -125,8 +126,8 @@ class SyncEnvWorker:
         self.policy_placeholders: Dict[str, Policy] = {
             f"parametrised_{aid}": PolicyCls(
                 name="placeholder",
-                action_space=self.env.action_space,
-                observation_space=self.env.observation_space,
+                action_space=self.env.action_space if not isinstance(self.env.action_space, dict) else self.env.action_space[aid],
+                observation_space=self.env.observation_space if not isinstance(self.env.observation_space, dict) else self.env.observation_space[aid],
                 config=self.config,
                 options={},
                 stats={},

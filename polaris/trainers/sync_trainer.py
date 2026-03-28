@@ -56,6 +56,7 @@ class SynchronousTrainer(Checkpointable):
             PolicyParams(**ConfigDict(pi_params)) for pi_params in self.config.policy_params
         ]
 
+
         PolicylCls = getattr(importlib.import_module(self.config.policy_path), self.config.policy_class)
         self.policy_map: Dict[str, Policy] = {
             policy_param.name: PolicylCls(
@@ -143,7 +144,8 @@ class SynchronousTrainer(Checkpointable):
         frames = 0
         env_steps = 0
 
-        experience, self.runnning_jobs = self.worker_set.wait(self.params_map, self.runnning_jobs, timeout=1e-2)
+        experience, self.runnning_jobs = self.worker_set.wait(self.params_map, self.runnning_jobs, timeout=120)
+        print(self.runnning_jobs)
         enqueue_time_start = time.time()
         num_batch = 0
 
@@ -244,8 +246,8 @@ class SynchronousTrainer(Checkpointable):
                 self.checkpoint_if_needed()
         except KeyboardInterrupt:
             print("Caught C^. Terminating...")
-        except Exception as e:
-            print(e)
+        else:
+            self.save()
 
 
 

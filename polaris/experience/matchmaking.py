@@ -49,14 +49,13 @@ class RandomMatchmaking(MatchMaking):
 
     def next(
             self,
-            policy_ids,
+            params_map: Dict[str, "PolicyParams"],
 
             **kwargs,
     ) -> Dict[str, "PolicyParams"]:
-        """
-        Returns a matchmaking (dict of AgentID:PolicyParams) based on the provided params map.
-        """
-        pass
+        key = list(params_map.keys())[0]
+        aid_0 = list(self.agent_ids)[0]
+        return {aid_0: params_map[key]}
 
     def update(self, **kwargs):
         pass

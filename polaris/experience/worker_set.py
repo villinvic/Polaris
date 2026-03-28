@@ -1,5 +1,5 @@
 import itertools
-from typing import List, Tuple, Union, Dict
+from typing import List, Tuple, Union, Dict, Any
 
 import tree
 from ml_collections import ConfigDict
@@ -107,7 +107,7 @@ class SyncWorkerSet:
     def push_jobs(
             self,
             params_map: Dict[str, PolicyParams],
-            jobs: List[Dict[str, PolicyParams]],
+            jobs: List[Dict[Any, PolicyParams]],
             push_back=False
     ) -> List:
         """

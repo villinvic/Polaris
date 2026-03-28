@@ -12,12 +12,13 @@ class PolarisEnv(Env):
     env_id = "unset"
 
     @classmethod
-    def register(cls):
+    def register(cls) -> str:
 
         def env_maker(env_index=None, **config):
             return cls(env_index=env_index, **config)
 
         ray.tune.register_env(cls.env_id, env_maker)
+        return cls.env_id
 
     @staticmethod
     def make(env_id, env_index=None, **config):

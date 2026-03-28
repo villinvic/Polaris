@@ -22,6 +22,7 @@ class NamedPolicyMetrics(NamedTuple):
 
 class PolicyMetrics(NamedTuple):
     returns: np.float32 = 0.
+    regularized_value: np.float32 = 0.
     episode_length: np.int32 = 0
     custom_metrics: dict = {}
 
@@ -99,6 +100,8 @@ class Episode:
         t = 0
         episode_lengths = defaultdict(np.int32)
         episode_rewards = defaultdict(np.float32)
+        regularized_episode_rewards = defaultdict(np.float32)
+
 
         while not dones["__all__"]:
             for aid, policy in self.agents_to_policies.items():
@@ -170,6 +173,11 @@ class Episode:
                     episode_lengths[aid] += 1
                     episode_rewards[aid] += rewards[aid]
 
+                    reg = self.agents_to_policies[aid].policy_config.entropy_cost
+                    discount = self.agents_to_policies[aid].policy_config.discount
+                    logp = extras[aid][SampleBatch.ACTION_LOGP]
+                    regularized_episode_rewards[aid] += (rewards[aid] - reg * logp) * discount ** t
+
                     observations[aid] = copy.deepcopy(next_observations[aid])
                     prev_rewards[aid] = rewards[aid]
                     prev_actions[aid] = actions[aid]
@@ -201,6 +209,7 @@ class Episode:
             length=np.int32(t),
             policy_metrics={policy.name: PolicyMetrics(
             returns=episode_rewards[agent_id],
+            regularized_value=regularized_episode_rewards[agent_id],
             episode_length=episode_lengths[agent_id])
                 for agent_id, policy in self.agents_to_policies.items()}
         )
