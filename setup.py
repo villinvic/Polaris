@@ -15,7 +15,7 @@ setup(
     "gymnasium==1.0.0",
     "dm-sonnet==2.0.2",
     "ml_collections",
-    "tensorflow-probability==0.24.0"
+    "tensorflow-probability==0.24.0",
     "sacred",
     "wandb",
     "plotly",
