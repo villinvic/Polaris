@@ -106,7 +106,7 @@ class CartPoleModel(BaseModel):
             values.numpy()
         )
 
-    @tf.function(jit_compile=False)
+    @tf.function(jit_compile=True)
     def _compute_action_batch_with_extras(
             self,
             obs,

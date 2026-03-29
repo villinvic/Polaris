@@ -135,7 +135,7 @@ class PPO(ParametrisedPolicy):
         return metrics
 
 
-    @tf.function
+    @tf.function(jit_compile=True)
     def _train(
             self,
             *,

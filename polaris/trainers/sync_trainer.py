@@ -145,7 +145,6 @@ class SynchronousTrainer(Checkpointable):
         env_steps = 0
 
         experience, self.runnning_jobs = self.worker_set.wait(self.params_map, self.runnning_jobs, timeout=120)
-        print(self.runnning_jobs)
         enqueue_time_start = time.time()
         num_batch = 0
 
