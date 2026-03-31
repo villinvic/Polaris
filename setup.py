@@ -8,7 +8,7 @@ setup(
     author_email='victor.villin@unine.ch',
     packages=find_packages(exclude=('tests', 'docs')),
     install_requires=[
-    "numpy>=1.26.4,<=2.0.0",
+    "numpy>=1.26.4,<2.0.0",
     "dm_tree",
     "ray>=2.9.0",
     "ray[tune]",
