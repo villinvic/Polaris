@@ -96,11 +96,11 @@ class PPO(ParametrisedPolicy):
 
         tm_input_batch[SampleBatch.ADVANTAGES][:] = (adv - np.mean(adv)) / (1e-8 + np.std(adv))
 
-
         for minibatch in get_epochs(tm_input_batch,
                                     n_epochs=self.config.n_epochs,
                                     minibatch_size=self.config.minibatch_size,
-                                    shuffle_minibatches=True,
+                                    shuffle_epochs=True,
+                                    shuffle_indices=not self.is_recurrent
                                     ):
             minibatch_metrics = self._train(
                 **minibatch

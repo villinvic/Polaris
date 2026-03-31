@@ -311,43 +311,70 @@ class ExperienceQueue:
                 yield self.queue.get_from_indices(indices)
 
 
-def get_epochs(time_major_batch, n_epochs, minibatch_size, shuffle_minibatches=True):
+def get_epochs(time_major_batch, n_epochs, minibatch_size, shuffle_epochs=True, shuffle_indices=False):
     """
-    Constructs epochs constructed with minibatches of specified size.
+    Constructs epochs with minibatches of specified size.
     Minibatches can be shuffled between each epoch.
+
+    Args:
+        time_major_batch: dict of arrays in time-major format (time x batch)
+        n_epochs: number of epochs to generate
+        minibatch_size: number of samples per minibatch
+        shuffle_epochs: whether to shuffle minibatches
+        shuffle_indices: whether to shuffle individual timesteps instead of full trajectories
     """
 
     max_seq_len, n_trajectories = time_major_batch[SampleBatch.ACTION].shape[:2]
     seq_lens = np.array(time_major_batch.pop(SampleBatch.SEQ_LENS))
 
-    # TODO comment for now
     state = time_major_batch.pop(SampleBatch.STATE)
     next_state = time_major_batch.pop(SampleBatch.NEXT_STATE, None)
 
     batch_size = max_seq_len * n_trajectories
-    ordering = np.arange(n_trajectories)
+
+    # Flatten indices for all timesteps across trajectories if shuffle_indices
+    if shuffle_indices:
+        ordering = np.arange(batch_size)
+    else:
+        ordering = np.arange(n_trajectories)
 
     for k in range(n_epochs):
-        if shuffle_minibatches:
+        if shuffle_epochs:
             np.random.shuffle(ordering)
+
         try:
-            minibatch_indices = np.split(ordering, batch_size//minibatch_size)
+            n_minibatches = batch_size // minibatch_size
+            minibatch_indices = np.array_split(ordering, n_minibatches)
         except ValueError:
-            raise ValueError(f"Have {n_trajectories} trajectories, cannot be split into {batch_size//minibatch_size} ({batch_size}//{minibatch_size}) minibatches.")
-
-        for indices in minibatch_indices:
-            def f(d):
-                return d[:, indices]
-
-            minibatch =  tree.map_structure(
-                f,
-                time_major_batch
+            raise ValueError(
+                f"Cannot split {ordering.size} samples into minibatches of size {minibatch_size}"
             )
 
-            minibatch[SampleBatch.SEQ_LENS] = seq_lens[indices]
+        for indices in minibatch_indices:
+            if shuffle_indices:
+                # Map flat indices back to (time, traj) indices
+                time_indices = indices // n_trajectories
+                traj_indices = indices % n_trajectories
 
-            minibatch[SampleBatch.STATE] = tree.map_structure(lambda x: x[indices], state)
-            if next_state is not None:
-                minibatch[SampleBatch.NEXT_STATE] = tree.map_structure(lambda x: x[indices], next_state)
+                def f(d):
+                    # Select specific timesteps
+                    return d[time_indices, traj_indices]
+
+                minibatch = tree.map_structure(f, time_major_batch)
+                minibatch[SampleBatch.SEQ_LENS] = seq_lens[traj_indices]
+                minibatch[SampleBatch.STATE] = tree.map_structure(lambda x: x[traj_indices], state)
+                if next_state is not None:
+                    minibatch[SampleBatch.NEXT_STATE] = tree.map_structure(lambda x: x[traj_indices], next_state)
+
+            else:
+                # Original trajectory-level shuffle
+                def f(d):
+                    return d[:, indices]
+
+                minibatch = tree.map_structure(f, time_major_batch)
+                minibatch[SampleBatch.SEQ_LENS] = seq_lens[indices]
+                minibatch[SampleBatch.STATE] = tree.map_structure(lambda x: x[indices], state)
+                if next_state is not None:
+                    minibatch[SampleBatch.NEXT_STATE] = tree.map_structure(lambda x: x[indices], next_state)
 
             yield minibatch
