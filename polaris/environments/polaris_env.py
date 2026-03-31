@@ -30,8 +30,7 @@ class PolarisEnv(Env):
         self.observation_space: Space
         self.num_players: int
         #self.episode_length: int
-
-        super().__init__()
+        Env.__init__(self)
         self._agent_ids = set()
         self.config = config
 
