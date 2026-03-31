@@ -100,7 +100,7 @@ class PPO(ParametrisedPolicy):
                                     n_epochs=self.config.n_epochs,
                                     minibatch_size=self.config.minibatch_size,
                                     shuffle_epochs=True,
-                                    shuffle_indices=not self.is_recurrent
+                                    #shuffle_indices=not self.is_recurrent
                                     ):
             minibatch_metrics = self._train(
                 **minibatch
