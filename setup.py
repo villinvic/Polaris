@@ -12,7 +12,7 @@ setup(
     "dm_tree",
     "ray>=2.9.0",
     "ray[tune]",
-    "gymnasium==1.0.0",
+    "gymnasium==1.2.0",
     "dm-sonnet==2.0.2",
     "ml_collections",
     "tensorflow-probability==0.24.0",
