@@ -2,6 +2,7 @@ import importlib
 import queue
 import threading
 import time
+from collections import defaultdict
 from typing import Dict, Union
 
 import numpy as np
@@ -145,8 +146,9 @@ class SynchronousTrainer(Checkpointable):
         env_steps = 0
 
         experience, self.runnning_jobs = self.worker_set.wait(self.params_map, self.runnning_jobs, timeout=120)
-        enqueue_time_start = time.time()
         num_batch = 0
+
+        to_push = defaultdict(list)
 
         for exp_batch in experience:
             if isinstance(exp_batch, EpisodeMetrics):
@@ -162,7 +164,7 @@ class SynchronousTrainer(Checkpointable):
                     exp_batch = exp_batch.pad_sequences()
                     exp_batch[SampleBatch.SEQ_LENS] = np.array(exp_batch[SampleBatch.SEQ_LENS])
                     # print(f"rcved {owner} {exp_batch[SampleBatch.SEQ_LENS]}, version {exp_batch[SampleBatch.VERSION][0]}")
-                    self.experience_queue[owner.name].push([exp_batch])
+                    to_push[batch_pid].append(exp_batch)
                     self.policy_map[owner.name].stats["samples_generated"] += exp_batch.size()
                     GlobalCounter.incr("batch_count")
                     frames += exp_batch.size()
@@ -174,6 +176,10 @@ class SynchronousTrainer(Checkpointable):
                 else:
                     # toss the batch...
                     pass
+
+        enqueue_time_start = time.time()
+        for pid, exp in to_push.items():
+            self.experience_queue[pid].push(exp)
 
         if frames > 0:
             GlobalTimer[GlobalTimer.PREV_FRAMES] = time.time()
