@@ -129,23 +129,22 @@ class SynchronousTrainer(Checkpointable):
         4. Reports experience and training metrics to the bank.
         """
 
-        t = []
-        t.append(time.time())
         GlobalTimer[GlobalTimer.PREV_ITERATION] = time.time()
         iteration_dt = GlobalTimer.dt(GlobalTimer.PREV_ITERATION)
 
-        t.append(time.time())
         n_jobs = self.worker_set.get_num_worker_available()
         jobs = [self.matchmaking.next(self.params_map) for _ in range(n_jobs)]
-        t.append(time.time())
 
+        data_sample_start = time.time()
         self.runnning_jobs += self.worker_set.push_jobs(self.params_map, jobs)
         experience_metrics = []
-        t.append(time.time())
         frames = 0
         env_steps = 0
 
         experience, self.runnning_jobs = self.worker_set.wait(self.params_map, self.runnning_jobs, timeout=120)
+        data_sample_end = time.time()
+        data_sample_ms = data_sample_end - data_sample_start
+
         num_batch = 0
 
         to_push = defaultdict(list)
@@ -231,6 +230,7 @@ class SynchronousTrainer(Checkpointable):
                 ] + [('RAM_percent_usage', ram_info.percent)]
         if frames > 0:
             misc_metrics.append(("FPS", frames / prev_frames_dt))
+            misc_metrics.append("data_sample_ms", data_sample_ms)
         if enqueue_time_ms is not None:
             misc_metrics.append(("experience_enqueue_ms", enqueue_time_ms))
 
