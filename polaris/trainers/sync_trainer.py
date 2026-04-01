@@ -193,7 +193,6 @@ class SynchronousTrainer(Checkpointable):
         if n_experience_metrics > 0:
             GlobalCounter[GlobalCounter.NUM_EPISODES] += n_experience_metrics
 
-        t.append(time.time())
         training_metrics = {}
         for policy_name, policy_queue in self.experience_queue.items():
             if policy_queue.is_ready():
