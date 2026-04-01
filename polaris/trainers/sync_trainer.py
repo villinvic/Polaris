@@ -229,7 +229,7 @@ class SynchronousTrainer(Checkpointable):
                 ] + [('RAM_percent_usage', ram_info.percent)]
         if frames > 0:
             misc_metrics.append(("FPS", frames / prev_frames_dt))
-            misc_metrics.append("data_sample_ms", data_sample_ms)
+            misc_metrics.append(("data_sample_ms", data_sample_ms))
         if enqueue_time_ms is not None:
             misc_metrics.append(("experience_enqueue_ms", enqueue_time_ms))
 
