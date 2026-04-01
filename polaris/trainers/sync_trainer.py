@@ -1,6 +1,4 @@
 import importlib
-import queue
-import threading
 import time
 from collections import defaultdict
 from typing import Dict, Union
@@ -10,7 +8,7 @@ import tree
 from ml_collections import ConfigDict
 
 from polaris.checkpointing.checkpointable import Checkpointable
-from polaris.experience.episode import EpisodeMetrics, NamedPolicyMetrics
+from polaris.experience.episode import EpisodeMetrics
 from polaris.experience.worker_set import SyncWorkerSet
 from polaris.environments.polaris_env import PolarisEnv
 from polaris.policies.policy import Policy, PolicyParams, ParamsMap

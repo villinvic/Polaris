@@ -99,8 +99,7 @@ class PPO(ParametrisedPolicy):
         for minibatch in get_epochs(tm_input_batch,
                                     n_epochs=self.config.n_epochs,
                                     minibatch_size=self.config.minibatch_size,
-                                    shuffle_epochs=True,
-                                    #shuffle_indices=not self.is_recurrent
+                                    shuffle_minibatches=True,
                                     ):
             minibatch_metrics = self._train(
                 **minibatch
