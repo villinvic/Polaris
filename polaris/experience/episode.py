@@ -176,7 +176,7 @@ class Episode:
                     reg = self.agents_to_policies[aid].policy_config.entropy_cost
                     discount = self.agents_to_policies[aid].policy_config.discount
                     logp = extras[aid][SampleBatch.ACTION_LOGP]
-                    regularized_episode_rewards[aid] += (rewards[aid] - reg * logp) * discount ** t
+                    regularized_episode_rewards[aid] += rewards[aid] - reg * logp
 
                     observations[aid] = copy.deepcopy(next_observations[aid])
                     prev_rewards[aid] = rewards[aid]
